@@ -17,6 +17,7 @@ WORKDIR /app
 COPY --from=builderNodeJS /app/dist /app/embed/ui
 RUN apk add --no-cache go 
 
+RUN go mod tidy
 RUN go build -o als && \
     chmod +x als
 
