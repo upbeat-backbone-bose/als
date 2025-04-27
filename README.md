@@ -1,4 +1,4 @@
-[![docker image build](https://github.com/wikihost-opensource/als/actions/workflows/docker-image.yml/badge.svg)](https://github.com/wikihost-opensource/als/actions/workflows/docker-image.yml)
+[![docker image build](https://github.com/upbeat-backbone-bose/als/actions/workflows/docker-image.yml/badge.svg)](https://github.com/upbeat-backbone-bose/als/actions/workflows/docker-image.yml)
 
 
 Language: English | [简体中文](README_zh_CN.md)
