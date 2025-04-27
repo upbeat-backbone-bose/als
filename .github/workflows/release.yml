@@ -20,7 +20,7 @@ jobs:
         working-directory: ./ui/
       - run: npm run build
         working-directory: ./ui/
-      - uses: actions/upload-artifact@master
+      - uses: actions/upload-artifact@v4
         with:
           name: ui
           path: ./ui/dist
@@ -37,10 +37,13 @@ jobs:
         with:
           go-version-file: 'backend/go.mod'
           cache-dependency-path: 'backend/go.sum'
-      - uses: actions/download-artifact@master
+      - uses: actions/download-artifact@v4
         with:
           name: ui
           path: backend/embed/ui
+	  - name: Tidy Go modules
+        run: go mod tidy
+        working-directory: ./backend
       - name: Build for Linux
         working-directory: ./backend
         run: |
@@ -64,10 +67,13 @@ jobs:
         with:
           go-version-file: 'backend/go.mod'
           cache-dependency-path: 'backend/go.sum'
-      - uses: actions/download-artifact@master
+      - uses: actions/download-artifact@v4
         with:
           name: ui
           path: backend/embed/ui
+	  - name: Tidy Go modules
+        run: go mod tidy
+        working-directory: ./backend
       - name: Build for macOS
         working-directory: ./backend
         run: |
