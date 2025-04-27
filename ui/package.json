@@ -23,7 +23,7 @@
     "@xterm/addon-attach": "0.10.0-beta.1",
     "@xterm/addon-fit": "0.9.0-beta.1",
     "@xterm/addon-serialize": "0.12.0-beta.1",
-    "apexcharts": "^3.45.1",
+    "apexcharts": "^4.0.0",
     "axios": "^1.6.5",
     "eslint": "^8.49.0",
     "eslint-plugin-vue": "^9.17.0",
@@ -34,7 +34,7 @@
     "v-clipboard": "3.0.0-next.1",
     "vite": "^5.0.10",
     "vue-i18n": "9",
-    "vue3-apexcharts": "^1.4.4",
+    "vue3-apexcharts": "^1.8.0",
     "vue3-markdown-it": "^1.0.10",
     "xterm": "^5.3.0"
   }
