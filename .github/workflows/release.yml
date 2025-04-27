@@ -9,9 +9,9 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: git submodule update --init --recursive
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 'lts/Hydrogen'
           cache: 'npm'
@@ -32,8 +32,8 @@ jobs:
         goos: [linux]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'backend/go.mod'
           cache-dependency-path: 'backend/go.sum'
@@ -59,8 +59,8 @@ jobs:
         goos: [darwin]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'backend/go.mod'
           cache-dependency-path: 'backend/go.sum'
