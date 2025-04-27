@@ -24,6 +24,7 @@ jobs:
         with:
           name: ui
           path: ./ui/dist
+          
   build-linux:
     runs-on: ubuntu-latest
     needs: build-ui
@@ -54,6 +55,7 @@ jobs:
           file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}
           asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}
           tag: ${{ github.ref }}
+          
   build-macos:
     runs-on: ubuntu-latest
     needs: build-ui
