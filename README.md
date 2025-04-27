@@ -9,10 +9,7 @@ Language: English | [简体中文](README_zh_CN.md)
 ```
 docker run -d --name looking-glass --restart always --network host ryachueng/looking-glass-server
 ```
-
-[DEMO](http://lg.hk1-bgp.hkg.50network.com/)
-
-If you don't want to use Docker , you can use the [compiled server](https://github.com/wikihost-opensource/als/releases)
+If you don't want to use Docker , you can use the [compiled server](https://github.com/upbeat-backbone-bose/als/releases)
 
 ## Host Requirements
  - RAM: 32MB or more
