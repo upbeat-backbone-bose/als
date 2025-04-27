@@ -9,10 +9,7 @@
 ```
 docker run -d --name looking-glass --restart always --network host ryachueng/looking-glass-server
 ```
-
-[DEMO](http://lg.hk1-bgp.hkg.50network.com/)
-
-如果不想使用 Docker , 您可以使用编译好的[服务器端](https://github.com/wikihost-opensource/als/releases)
+如果不想使用 Docker , 您可以使用编译好的[服务器端](https://github.com/upbeat-backbone-bose/als/releases)
 
 ## 配置要求
  - 内存: 32MB 或更好
