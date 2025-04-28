@@ -1,3 +1,4 @@
+[![Build with release](https://github.com/upbeat-backbone-bose/als/actions/workflows/release.yml/badge.svg)](https://github.com/upbeat-backbone-bose/als/actions/workflows/release.yml)|
 [![docker image build](https://github.com/upbeat-backbone-bose/als/actions/workflows/docker-image.yml/badge.svg)](https://github.com/upbeat-backbone-bose/als/actions/workflows/docker-image.yml)
 
 
