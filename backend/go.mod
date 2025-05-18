@@ -13,7 +13,7 @@ require (
 	github.com/reeflective/console v0.1.24
 	github.com/samlm0/go-ping v0.1.0
 	github.com/spf13/cobra v1.9.1
-	github.com/vishvananda/netlink v1.1.0
+	github.com/vishvananda/netlink v1.3.1
 )
 
 require (
@@ -46,7 +46,7 @@ require (
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df // indirect
+	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/mod v0.24.0 // indirect
