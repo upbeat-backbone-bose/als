@@ -6,7 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/creack/pty v1.1.24
-	github.com/gin-gonic/gin v1.10.0
+	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/miekg/dns v1.1.66
