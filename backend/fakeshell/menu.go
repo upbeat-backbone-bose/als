@@ -27,6 +27,7 @@ func defineMenuCommands(a *console.Console) console.Commands {
 			"nexttrace":  config.Config.FeatureTraceroute,
 			"speedtest":  config.Config.FeatureSpeedtestDotNet,
 			"mtr":        config.Config.FeatureMTR,
+			"iperf3":     config.Config.FeatureIperf3,
 		}
 
 		argsFilter := map[string]func([]string) ([]string, error){
