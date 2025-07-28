@@ -10,7 +10,7 @@ COPY --from=builder_node_js_cache /app/node_modules /app/node_modules
 RUN npm run build \
     && chmod -R 650 /app/dist
 
-FROM alpine:3.22.1 AS builder_golang
+FROM alpine:3 AS builder_golang
 ADD backend /app
 WORKDIR /app
 COPY --from=builder_node_js /app/dist /app/embed/ui
@@ -20,7 +20,7 @@ RUN go mod tidy
 RUN go build -o als && \
     chmod +x als
 
-FROM alpine:3.22.1 AS builder_env
+FROM alpine:3 AS builder_env
 WORKDIR /app
 ADD scripts /app
 RUN sh /app/install-software.sh
@@ -31,7 +31,7 @@ RUN apk add --no-cache \
     iputils
 RUN rm -rf /app
 
-FROM alpine:3.22.1
+FROM alpine:3
 LABEL maintainer="samlm0 <update@ifdream.net>"
 COPY --from=builder_env / /
 COPY --from=builder_golang --chmod=777 /app/als/als /bin/als
