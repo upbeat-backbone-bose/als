@@ -9,7 +9,7 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/miekg/dns v1.1.67
+	github.com/miekg/dns v1.1.68
 	github.com/reeflective/console v0.1.25
 	github.com/samlm0/go-ping v0.1.0
 	github.com/spf13/cobra v1.9.1
