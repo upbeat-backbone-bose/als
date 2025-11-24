@@ -9,7 +9,7 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: git submodule update --init --recursive
       - uses: actions/setup-node@v6
         with:
@@ -33,7 +33,7 @@ jobs:
         goos: [linux]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'backend/go.mod'
@@ -64,7 +64,7 @@ jobs:
         goos: [darwin]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: 'backend/go.mod'
