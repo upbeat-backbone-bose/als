@@ -1,6 +1,6 @@
 module github.com/samlm0/als/v2
 
-go 1.24.5
+go 1.25.7
 
 require (
 	github.com/creack/pty v1.1.24
