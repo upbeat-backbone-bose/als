@@ -32,8 +32,10 @@ RUN apk add --no-cache \
 RUN rm -rf /app
 
 FROM alpine:3
-LABEL maintainer="samlm0 <update@ifdream.net>"
+LABEL maintainer="upbeat-backbone-bose <pnlife@gmail.com>"
 COPY --from=builder_env / /
 COPY --from=builder_golang --chmod=777 /app/als/als /bin/als
+# 更新基础包并清理缓存
+RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 
 CMD ["als"]
