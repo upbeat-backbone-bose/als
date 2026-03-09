@@ -6,13 +6,19 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 )
 
 func updateLocation() {
 	log.Default().Println("Updating server location from internet...")
 
-	resp, err := http.Get("https://ipapi.co/json/")
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("https://ipapi.co/json/")
 	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
 		return
 	}
 	body, err := io.ReadAll(resp.Body)

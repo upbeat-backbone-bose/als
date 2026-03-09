@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/miekg/dns"
 )
@@ -94,13 +96,18 @@ func getPublicIPViaHttp(client *http.Client) (string, error) {
 		if err != nil {
 			continue
 		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			continue
+		}
 
 		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			return "", err
 		}
 
-		addr := net.ParseIP(string(body))
+		addr := net.ParseIP(strings.TrimSpace(string(body)))
 		if addr != nil {
 			return addr.String(), nil
 		}
@@ -111,6 +118,7 @@ func getPublicIPViaHttp(client *http.Client) (string, error) {
 
 func getPublicIPv4ViaHttp() (string, error) {
 	client := &http.Client{
+		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				var dialer net.Dialer

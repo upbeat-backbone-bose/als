@@ -2,9 +2,13 @@ package client
 
 import (
 	"context"
+	"sync"
 )
 
-var Clients = make(map[string]*ClientSession)
+var (
+	clientsMu sync.RWMutex
+	Clients   = make(map[string]*ClientSession)
+)
 
 type Message struct {
 	Name    string
@@ -37,11 +41,50 @@ func (c *ClientSession) GetContext(requestCtx context.Context) context.Context {
 	return ctx
 }
 
+func (c *ClientSession) TrySend(msg *Message) bool {
+	select {
+	case c.Channel <- msg:
+		return true
+	default:
+		return false
+	}
+}
+
+func AddClient(id string, session *ClientSession) {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+	Clients[id] = session
+}
+
+func GetClient(id string) (*ClientSession, bool) {
+	clientsMu.RLock()
+	defer clientsMu.RUnlock()
+	session, ok := Clients[id]
+	return session, ok
+}
+
+func RemoveClient(id string) {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+	delete(Clients, id)
+}
+
+func SnapshotClients() []*ClientSession {
+	clientsMu.RLock()
+	defer clientsMu.RUnlock()
+	list := make([]*ClientSession, 0, len(Clients))
+	for _, c := range Clients {
+		list = append(list, c)
+	}
+	return list
+}
+
 func BroadCastMessage(name string, content string) {
-	for _, client := range Clients {
-		client.Channel <- &Message{
-			Name:    name,
-			Content: content,
-		}
+	msg := &Message{
+		Name:    name,
+		Content: content,
+	}
+	for _, client := range SnapshotClients() {
+		client.TrySend(msg)
 	}
 }

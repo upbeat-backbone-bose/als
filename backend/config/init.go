@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 )
 
 var Config *ALSConfig
@@ -107,8 +108,14 @@ func LoadSponsorMessage() {
 		}
 	}
 
-	resp, err := http.Get(Config.SponsorMessage)
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	resp, err := httpClient.Get(Config.SponsorMessage)
 	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Default().Println("ERROR: Failed to load sponsor message.")
+			return
+		}
 		content, err := io.ReadAll(resp.Body)
 		if err == nil {
 			log.Default().Println("Loaded sponser message from url.")

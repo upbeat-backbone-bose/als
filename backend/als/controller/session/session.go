@@ -19,9 +19,9 @@ type sessionConfig struct {
 func Handle(c *gin.Context) {
 	uuid := uuid.New().String()
 	// uuid := "1"
-	channel := make(chan *client.Message)
+	channel := make(chan *client.Message, 64)
 	clientSession := &client.ClientSession{Channel: channel}
-	client.Clients[uuid] = clientSession
+	client.AddClient(uuid, clientSession)
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
 	clientSession.SetContext(ctx)
@@ -29,7 +29,6 @@ func Handle(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 	c.SSEvent("SessionId", uuid)
 	_config := &sessionConfig{
 		ALSConfig: *config.Config,
@@ -39,7 +38,7 @@ func Handle(c *gin.Context) {
 	configJson, _ := json.Marshal(_config)
 	c.SSEvent("Config", string(configJson))
 	c.Writer.Flush()
-	interfaceCacheJson, _ := json.Marshal(timer.InterfaceCaches)
+	interfaceCacheJson, _ := json.Marshal(timer.GetInterfaceCachesSnapshot())
 	c.SSEvent("InterfaceCache", string(interfaceCacheJson))
 	c.Writer.Flush()
 
@@ -57,6 +56,5 @@ func Handle(c *gin.Context) {
 	}
 
 FINISH:
-	close(channel)
-	delete(client.Clients, uuid)
+	client.RemoveClient(uuid)
 }

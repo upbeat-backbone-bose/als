@@ -4,6 +4,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samlm0/als/v2/als/client"
@@ -18,7 +19,29 @@ type InterfaceTrafficCache struct {
 	LastTx        uint64 `json:"-"`
 }
 
-var InterfaceCaches = make(map[int]*InterfaceTrafficCache)
+var (
+	interfaceCachesMu sync.RWMutex
+	InterfaceCaches   = make(map[int]*InterfaceTrafficCache)
+)
+
+func GetInterfaceCachesSnapshot() map[int]*InterfaceTrafficCache {
+	interfaceCachesMu.RLock()
+	defer interfaceCachesMu.RUnlock()
+
+	result := make(map[int]*InterfaceTrafficCache, len(InterfaceCaches))
+	for idx, cache := range InterfaceCaches {
+		copiedCaches := make([][3]uint64, len(cache.Caches))
+		copy(copiedCaches, cache.Caches)
+		result[idx] = &InterfaceTrafficCache{
+			InterfaceName: cache.InterfaceName,
+			LastCacheTime: cache.LastCacheTime,
+			Caches:        copiedCaches,
+			LastRx:        cache.LastRx,
+			LastTx:        cache.LastTx,
+		}
+	}
+	return result
+}
 
 func SetupInterfaceBroadcast() {
 	ticker := time.NewTicker(1 * time.Second)
@@ -60,6 +83,7 @@ func SetupInterfaceBroadcast() {
 				continue
 			}
 			now := time.Now()
+			interfaceCachesMu.Lock()
 			cache, ok := InterfaceCaches[iface.Index]
 			if !ok {
 				InterfaceCaches[iface.Index] = &InterfaceTrafficCache{
@@ -80,6 +104,7 @@ func SetupInterfaceBroadcast() {
 				cache.Caches = cache.Caches[len(cache.Caches)-30:]
 			}
 			cache.LastCacheTime = now
+			interfaceCachesMu.Unlock()
 			client.BroadCastMessage("InterfaceTraffic", iface.Name+","+strconv.Itoa(int(now.Unix()))+","+strconv.Itoa(int(cache.LastRx))+","+strconv.Itoa(int(cache.LastTx)))
 		}
 	}

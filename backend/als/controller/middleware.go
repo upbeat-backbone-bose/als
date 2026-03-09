@@ -8,7 +8,7 @@ import (
 func MiddlewareSessionOnHeader() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionId := c.GetHeader("session")
-		client, ok := client.Clients[sessionId]
+		clientSession, ok := client.GetClient(sessionId)
 		if !ok {
 			c.JSON(400, &gin.H{
 				"success": false,
@@ -17,7 +17,7 @@ func MiddlewareSessionOnHeader() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		c.Set("clientSession", client)
+		c.Set("clientSession", clientSession)
 		c.Next()
 	}
 }
@@ -25,7 +25,7 @@ func MiddlewareSessionOnHeader() gin.HandlerFunc {
 func MiddlewareSessionOnUrl() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionId := c.Param("session")
-		client, ok := client.Clients[sessionId]
+		clientSession, ok := client.GetClient(sessionId)
 		if !ok {
 			c.JSON(400, &gin.H{
 				"success": false,
@@ -34,7 +34,7 @@ func MiddlewareSessionOnUrl() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		c.Set("clientSession", client)
+		c.Set("clientSession", clientSession)
 		c.Next()
 	}
 }
