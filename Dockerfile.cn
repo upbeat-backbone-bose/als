@@ -11,13 +11,11 @@ RUN npm run build \
     && chmod -R 650 /app/dist
 
 
-FROM alpine:3 AS builder_golang
+FROM golang:1.26-alpine AS builder_golang
 ADD backend /app
 WORKDIR /app
 COPY --from=builder_node_js /app/dist /app/embed/ui
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories && \
-    apk add --no-cache go && \
-    go env -w GO111MODULE=on && \
+RUN go env -w GO111MODULE=on && \
     go env -w GOPROXY=https://goproxy.cn,direct
 
 RUN go mod tidy

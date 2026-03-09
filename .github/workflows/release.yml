@@ -10,12 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: git submodule update --init --recursive
+        with:
+          submodules: recursive
       - uses: actions/setup-node@v6
         with:
-          node-version: 'lts/Hydrogen'
+          node-version: '22'
           cache: 'npm'
-          cache-dependency-path: 'ui'
+          cache-dependency-path: 'ui/package-lock.json'
       - run: npm i
         working-directory: ./ui/
       - run: npm run build

@@ -10,11 +10,10 @@ COPY --from=builder_node_js_cache /app/node_modules /app/node_modules
 RUN npm run build \
     && chmod -R 650 /app/dist
 
-FROM alpine:3 AS builder_golang
+FROM golang:1.26-alpine AS builder_golang
 ADD backend /app
 WORKDIR /app
 COPY --from=builder_node_js /app/dist /app/embed/ui
-RUN apk add --no-cache go 
 
 RUN go mod tidy
 RUN go build -o als && \
