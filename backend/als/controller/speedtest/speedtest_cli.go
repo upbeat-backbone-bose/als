@@ -6,31 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samlm0/als/v2/als/client"
 )
-
-var count = 1
-var lock = sync.Mutex{}
-
-func fakeQueue() {
-	go func() {
-		lock.Lock()
-		count++
-		lock.Unlock()
-		ctx, cancel := context.WithCancel(context.TODO())
-		client.WaitQueue(ctx, nil)
-		lock.Lock()
-		fmt.Println(count)
-		lock.Unlock()
-		time.Sleep(time.Duration(count) * time.Second)
-		cancel()
-	}()
-}
 
 func HandleSpeedtestDotNet(c *gin.Context) {
 	nodeId, ok := c.GetQuery("node_id")
@@ -41,9 +22,7 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 	}
 	var closed atomic.Bool
 	timeout := time.Second * 60
-	lock.Lock()
-	count = 1
-	lock.Unlock()
+
 	ctx, cancel := context.WithTimeout(clientSession.GetContext(c.Request.Context()), timeout)
 	defer cancel()
 	defer func() {
