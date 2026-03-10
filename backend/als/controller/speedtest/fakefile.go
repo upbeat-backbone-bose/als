@@ -67,16 +67,18 @@ func HandleFakeFile(c *gin.Context) {
 		return
 	}
 
-	size, ok := sizeToBytes(filename)
-	if ok != nil {
-		c.String(404, "Invaild file size")
+	size, err := sizeToBytes(filename)
+	if err != nil {
+		c.String(404, "Invalid file size")
 		return
 	}
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Length", strconv.FormatInt(size, 10))
 	c.Stream(func(w io.Writer) bool {
 		buf := make([]byte, 1024*1024)
-		rand.Read(buf)
+		if _, err := rand.Read(buf); err != nil {
+			return false
+		}
 
 		for size > 0 {
 			// 如果剩余的大小小于缓冲区的大小，只写入剩余的大小
@@ -85,7 +87,9 @@ func HandleFakeFile(c *gin.Context) {
 			}
 
 			// 将缓冲区写入响应
-			w.Write(buf)
+			if _, err := w.Write(buf); err != nil {
+				return false
+			}
 
 			// 更新剩余的大小
 			size -= int64(len(buf))

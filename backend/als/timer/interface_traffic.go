@@ -59,7 +59,7 @@ func SetupInterfaceBroadcast() {
 			}
 
 			// skip docker
-			if strings.Index(iface.Name, "docker") == 0 {
+			if strings.HasPrefix(iface.Name, "docker") {
 				continue
 			}
 
@@ -69,12 +69,12 @@ func SetupInterfaceBroadcast() {
 			}
 
 			// skip wireguard
-			if strings.Index(iface.Name, "wt") == 0 {
+			if strings.HasPrefix(iface.Name, "wt") {
 				continue
 			}
 
 			// skip veth
-			if strings.Index(iface.Name, "veth") == 0 {
+			if strings.HasPrefix(iface.Name, "veth") {
 				continue
 			}
 
@@ -82,7 +82,15 @@ func SetupInterfaceBroadcast() {
 			if err != nil {
 				continue
 			}
+			stats := link.Attrs().Statistics
+			if stats == nil {
+				continue
+			}
 			now := time.Now()
+			ts := now.Unix()
+			if ts < 0 {
+				ts = 0
+			}
 			interfaceCachesMu.Lock()
 			cache, ok := InterfaceCaches[iface.Index]
 			if !ok {
@@ -96,16 +104,19 @@ func SetupInterfaceBroadcast() {
 				cache = InterfaceCaches[iface.Index]
 			}
 
-			cache.LastRx = link.Attrs().Statistics.RxBytes
-			cache.LastTx = link.Attrs().Statistics.TxBytes
+			cache.LastRx = stats.RxBytes
+			cache.LastTx = stats.TxBytes
 
-			cache.Caches = append(cache.Caches, [3]uint64{uint64(now.Unix()), cache.LastRx, cache.LastTx})
+			cache.Caches = append(cache.Caches, [3]uint64{uint64(ts), cache.LastRx, cache.LastTx})
 			if len(cache.Caches) > 30 {
 				cache.Caches = cache.Caches[len(cache.Caches)-30:]
 			}
 			cache.LastCacheTime = now
 			interfaceCachesMu.Unlock()
-			client.BroadCastMessage("InterfaceTraffic", iface.Name+","+strconv.Itoa(int(now.Unix()))+","+strconv.Itoa(int(cache.LastRx))+","+strconv.Itoa(int(cache.LastTx)))
+			client.BroadCastMessage(
+				"InterfaceTraffic",
+				iface.Name+","+strconv.FormatInt(ts, 10)+","+strconv.FormatUint(cache.LastRx, 10)+","+strconv.FormatUint(cache.LastTx, 10),
+			)
 		}
 	}
 }

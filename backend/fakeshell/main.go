@@ -1,6 +1,7 @@
 package fakeshell
 
 import (
+	"fmt"
 	"io"
 	"os"
 
@@ -29,5 +30,8 @@ func HandleConsole() {
 
 	menu.AddInterrupt(io.EOF, exitCtrlD)
 	menu.SetCommands(defineMenuCommands(app))
-	app.Start()
+	if err := app.Start(); err != nil {
+		fmt.Println("console start failed:", err)
+		os.Exit(1)
+	}
 }

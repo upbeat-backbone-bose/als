@@ -2,6 +2,7 @@ package shell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/creack/pty"
 	"github.com/gin-gonic/gin"
@@ -48,9 +50,12 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 	ctx, cancel := context.WithCancel(session.GetContext(ginC.Request.Context()))
 	defer cancel()
 
-	ex, _ := os.Executable()
-	c := exec.Command(ex, "--shell")
-	ptmx, err := pty.Start(c)
+	ex, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.CommandContext(ctx, ex, "--shell") // #nosec G204 command is fixed to current binary
+	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return
 	}
@@ -59,8 +64,8 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 	// context aware
 	go func() {
 		<-ctx.Done()
-		if c.Process != nil {
-			c.Process.Kill()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
 		}
 	}()
 
@@ -73,7 +78,9 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 			if err != nil {
 				break
 			}
-			conn.WriteMessage(websocket.BinaryMessage, buf[:n])
+			if writeErr := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); writeErr != nil {
+				break
+			}
 		}
 	}()
 
@@ -83,24 +90,42 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 		for {
 			_, buf, err := conn.ReadMessage()
 			if err != nil {
-				break
+				return
+			}
+			if len(buf) < 1 {
+				continue
 			}
 			index := string(buf[:1])
 			switch index {
 			case "1":
 				// normal input
-				ptmx.Write(buf[1:])
+				if _, err := ptmx.Write(buf[1:]); err != nil {
+					return
+				}
 			case "2":
 				// win resize
 				args := strings.Split(string(buf[1:]), ";")
-				h, _ := strconv.Atoi(args[0])
-				w, _ := strconv.Atoi(args[1])
-				pty.Setsize(ptmx, &pty.Winsize{
+				if len(args) < 2 {
+					continue
+				}
+				h, errH := strconv.Atoi(args[0])
+				w, errW := strconv.Atoi(args[1])
+				if errH != nil || errW != nil {
+					continue
+				}
+				if h <= 0 || h > int(^uint16(0)) || w <= 0 || w > int(^uint16(0)) {
+					continue
+				}
+				if err := pty.Setsize(ptmx, &pty.Winsize{
 					Rows: uint16(h),
 					Cols: uint16(w),
-				})
+				}); err != nil {
+					return
+				}
 			}
 		}
 	}()
-	c.Wait()
+	if err := cmd.Wait(); err != nil && !errors.Is(err, syscall.ECHILD) {
+		fmt.Println("shell command exited with error:", err)
+	}
 }

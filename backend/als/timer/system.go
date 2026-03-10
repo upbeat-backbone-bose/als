@@ -14,7 +14,7 @@ func UpdateSystemResource() {
 	for {
 		<-ticker.C
 		runtime.ReadMemStats(&m)
-		client.BroadCastMessage("MemoryUsage", strconv.Itoa(int(m.Sys)))
+		client.BroadCastMessage("MemoryUsage", strconv.FormatUint(m.Sys, 10))
 	}
 
 }

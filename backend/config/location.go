@@ -26,7 +26,10 @@ func updateLocation() {
 		return
 	}
 	var data map[string]interface{}
-	json.Unmarshal(body, &data)
+	if err := json.Unmarshal(body, &data); err != nil {
+		log.Default().Printf("parse location failed: %v", err)
+		return
+	}
 	if _, ok := data["country_name"]; !ok {
 		return
 	}

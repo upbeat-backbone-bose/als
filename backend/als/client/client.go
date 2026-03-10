@@ -25,19 +25,15 @@ func (c *ClientSession) SetContext(ctx context.Context) {
 }
 
 func (c *ClientSession) GetContext(requestCtx context.Context) context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-
+	ctx, cancel := context.WithCancel(requestCtx) // #nosec G118: cancel triggered by c.ctx or requestCtx lifecycle
 	go func() {
 		select {
 		case <-c.ctx.Done():
 			cancel()
-			break
-		case <-requestCtx.Done():
-			cancel()
-			break
+		case <-ctx.Done():
+			cancel() // idempotent; ensures resources are released
 		}
 	}()
-
 	return ctx
 }
 

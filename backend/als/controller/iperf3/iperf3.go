@@ -2,9 +2,10 @@ package iperf3
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/big"
 	"os/exec"
 	"strconv"
 	"time"
@@ -14,9 +15,16 @@ import (
 	"github.com/samlm0/als/v2/config"
 )
 
-func random(min, max int) int {
-	rand.Seed(time.Now().UnixNano())
-	return rand.Intn(max-min+1) + min
+func randomPort(min, max int) (int, error) {
+	if max < min {
+		return 0, fmt.Errorf("invalid port range")
+	}
+	rng := max - min + 1
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(rng)))
+	if err != nil {
+		return 0, err
+	}
+	return int(n.Int64()) + min, nil
 }
 
 func Handle(c *gin.Context) {
@@ -24,21 +32,22 @@ func Handle(c *gin.Context) {
 	clientSession := v.(*client.ClientSession)
 
 	timeout := time.Second * 60
-	port := random(config.Config.Iperf3StartPort, config.Config.Iperf3EndPort)
+	port, err := randomPort(config.Config.Iperf3StartPort, config.Config.Iperf3EndPort)
+	if err != nil {
+		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(clientSession.GetContext(c.Request.Context()), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "iperf3", "-s", "--forceflush", "-p", fmt.Sprintf("%d", port))
+	cmd := exec.CommandContext(ctx, "iperf3", "-s", "--forceflush", "-p", fmt.Sprintf("%d", port)) // #nosec G204 args are internally generated
 	clientSession.Channel <- &client.Message{
 		Name:    "Iperf3",
 		Content: strconv.Itoa(port),
 	}
 
-	writer := func(pipe io.ReadCloser, err error) {
-		if err != nil {
-			return
-		}
+	writer := func(pipe io.ReadCloser) {
 		for {
 			buf := make([]byte, 1024)
 			n, err := pipe.Read(buf)
@@ -53,20 +62,32 @@ func Handle(c *gin.Context) {
 		}
 	}
 
-	go writer(cmd.StdoutPipe())
-	go writer(cmd.StderrPipe())
-
-	err := cmd.Start()
+	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		// 处理错误
-		// fmt.Println("Error starting command:", err)
+		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	err = cmd.Start()
+	if err != nil {
 		c.JSON(400, &gin.H{
 			"success": false,
 		})
 		return
 	}
 
-	cmd.Wait()
+	go writer(stdoutPipe)
+	go writer(stderrPipe)
+
+	if err := cmd.Wait(); err != nil {
+		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+		return
+	}
 
 	c.JSON(200, &gin.H{
 		"success": true,

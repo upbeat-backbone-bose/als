@@ -26,6 +26,6 @@ func (e *Server) SetListen(listen string) {
 	e.listen = listen
 }
 
-func (e *Server) Start() {
-	e.engine.Run(e.listen)
+func (e *Server) Start() error {
+	return e.engine.Run(e.listen)
 }

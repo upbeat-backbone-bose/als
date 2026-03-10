@@ -97,12 +97,16 @@ func getPublicIPViaHttp(client *http.Client) (string, error) {
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
+			if cerr := resp.Body.Close(); cerr != nil {
+				return "", cerr
+			}
 			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
 		if err != nil {
 			return "", err
 		}

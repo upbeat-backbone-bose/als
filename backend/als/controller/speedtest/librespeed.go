@@ -22,12 +22,16 @@ func HandleDownload(c *gin.Context) {
 	}
 
 	data := make([]byte, 1048576)
-	rand.Read(data)
+	if _, err := rand.Read(data); err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
 
 	for i := 0; i < chunks; i++ {
-		c.Writer.Write(data)
+		if _, err := c.Writer.Write(data); err != nil {
+			return
+		}
 	}
-	c.Writer.CloseNotify()
 }
 
 func HandleUpload(c *gin.Context) {
@@ -39,7 +43,6 @@ func HandleUpload(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	_ = c.Request.Body.Close()
 
 	c.Header("Connection", "keep-alive")
 	c.Status(http.StatusOK)
