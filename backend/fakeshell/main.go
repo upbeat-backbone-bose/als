@@ -29,7 +29,7 @@ func HandleConsole() {
 	// }()
 
 	menu.AddInterrupt(io.EOF, exitCtrlD)
-	menu.SetCommands(defineMenuCommands(app))
+	menu.SetCommands(defineMenuCommands())
 	if err := app.Start(); err != nil {
 		fmt.Println("console start failed:", err)
 		os.Exit(1)

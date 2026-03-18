@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func defineMenuCommands(a *console.Console) console.Commands {
+func defineMenuCommands() console.Commands {
 	showedIsFirstTime := false
 	return func() *cobra.Command {
 		rootCmd := &cobra.Command{}
@@ -52,7 +52,7 @@ func defineMenuCommands(a *console.Console) console.Commands {
 				_, err := exec.LookPath(command)
 				if err != nil {
 					if !showedIsFirstTime {
-						fmt.Println("Error: " + command + " is not install")
+						fmt.Println("Error: " + command + " is not installed")
 					}
 					hasNotFound = true
 					continue
@@ -61,7 +61,7 @@ func defineMenuCommands(a *console.Console) console.Commands {
 				if !ok {
 					filter = argsPassthough
 				}
-				commands.AddExecureableAsCommand(rootCmd, command, filter)
+				commands.AddExecutableAsCommand(rootCmd, command, filter)
 			}
 		}
 

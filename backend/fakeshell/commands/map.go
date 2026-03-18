@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func AddExecureableAsCommand(cmd *cobra.Command, command string, argFilter func(args []string) ([]string, error)) {
+func AddExecutableAsCommand(cmd *cobra.Command, command string, argFilter func(args []string) ([]string, error)) {
 
 	cmdDefine := &cobra.Command{
 		Use: command,
