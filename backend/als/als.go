@@ -2,6 +2,7 @@ package als
 
 import (
 	"log"
+	"time"
 
 	"github.com/samlm0/als/v2/als/client"
 	"github.com/samlm0/als/v2/als/timer"
@@ -22,5 +23,17 @@ func Init() {
 	}
 	go timer.UpdateSystemResource()
 	go client.HandleQueue()
+	go cleanupExpiredClients()
 	aHttp.Start()
+}
+
+func cleanupExpiredClients() {
+	ticker := time.NewTicker(1 * time.Hour)
+	for {
+		<-ticker.C
+		removed := client.RemoveExpiredClients()
+		if removed > 0 {
+			log.Default().Printf("Cleaned up %d expired sessions\n", removed)
+		}
+	}
 }
