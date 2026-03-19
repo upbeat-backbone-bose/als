@@ -33,7 +33,7 @@ RUN rm -rf /app
 FROM alpine:3
 LABEL maintainer="upbeat-backbone-bose <pnlife@gmail.com>"
 COPY --from=builder_env / /
-COPY --from=builder_golang --chmod=777 /app/als/als /bin/als
+COPY --from=builder_golang --chmod=777 /app/als /bin/als
 # 更新基础包并清理缓存
 RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 
