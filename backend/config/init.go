@@ -98,7 +98,7 @@ func LoadSponsorMessage() {
 		return
 	}
 
-	log.Default().Println("Loading sponser message...")
+	log.Default().Println("Loading sponsor message...")
 
 	if _, err := os.Stat(Config.SponsorMessage); err == nil {
 		content, err := os.ReadFile(Config.SponsorMessage)
@@ -118,7 +118,7 @@ func LoadSponsorMessage() {
 		}
 		content, err := io.ReadAll(resp.Body)
 		if err == nil {
-			log.Default().Println("Loaded sponser message from url.")
+			log.Default().Println("Loaded sponsor message from url.")
 			Config.SponsorMessage = string(content)
 			return
 		}

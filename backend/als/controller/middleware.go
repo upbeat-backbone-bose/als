@@ -12,7 +12,7 @@ func MiddlewareSessionOnHeader() gin.HandlerFunc {
 		if !ok {
 			c.JSON(400, &gin.H{
 				"success": false,
-				"error":   "Invaild session",
+				"error":   "Invalid session",
 			})
 			c.Abort()
 			return
@@ -29,7 +29,7 @@ func MiddlewareSessionOnUrl() gin.HandlerFunc {
 		if !ok {
 			c.JSON(400, &gin.H{
 				"success": false,
-				"error":   "Invaild session",
+				"error":   "Invalid session",
 			})
 			c.Abort()
 			return

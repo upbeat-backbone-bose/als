@@ -3,7 +3,10 @@ package client
 import (
 	"context"
 	"sync"
+	"time"
 )
+
+const sessionExpireDuration = 24 * time.Hour
 
 var (
 	clientsMu sync.RWMutex
@@ -16,8 +19,10 @@ type Message struct {
 }
 
 type ClientSession struct {
-	Channel chan *Message
-	ctx     context.Context
+	Channel    chan *Message
+	ctx        context.Context
+	CreatedAt  time.Time
+	cancelFunc context.CancelFunc
 }
 
 func (c *ClientSession) SetContext(ctx context.Context) {
@@ -25,13 +30,14 @@ func (c *ClientSession) SetContext(ctx context.Context) {
 }
 
 func (c *ClientSession) GetContext(requestCtx context.Context) context.Context {
-	ctx, cancel := context.WithCancel(requestCtx) // #nosec G118: cancel triggered by c.ctx or requestCtx lifecycle
+	ctx, cancel := context.WithCancel(requestCtx)
+	c.cancelFunc = cancel
 	go func() {
 		select {
 		case <-c.ctx.Done():
 			cancel()
 		case <-ctx.Done():
-			cancel() // idempotent; ensures resources are released
+			cancel()
 		}
 	}()
 	return ctx
@@ -56,13 +62,36 @@ func GetClient(id string) (*ClientSession, bool) {
 	clientsMu.RLock()
 	defer clientsMu.RUnlock()
 	session, ok := Clients[id]
+	if ok && time.Since(session.CreatedAt) > sessionExpireDuration {
+		return nil, false
+	}
 	return session, ok
 }
 
 func RemoveClient(id string) {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
+	if client, ok := Clients[id]; ok && client.cancelFunc != nil {
+		client.cancelFunc()
+	}
 	delete(Clients, id)
+}
+
+func RemoveExpiredClients() int {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+	expired := time.Now().Add(-sessionExpireDuration)
+	removed := 0
+	for id, session := range Clients {
+		if session.CreatedAt.Before(expired) {
+			if session.cancelFunc != nil {
+				session.cancelFunc()
+			}
+			delete(Clients, id)
+			removed++
+		}
+	}
+	return removed
 }
 
 func SnapshotClients() []*ClientSession {

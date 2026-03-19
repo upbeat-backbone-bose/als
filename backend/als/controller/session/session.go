@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -18,13 +19,18 @@ type sessionConfig struct {
 
 func Handle(c *gin.Context) {
 	uuid := uuid.New().String()
-	// uuid := "1"
 	channel := make(chan *client.Message, 64)
-	clientSession := &client.ClientSession{Channel: channel}
+	clientSession := &client.ClientSession{
+		Channel:   channel,
+		CreatedAt: time.Now(),
+	}
 	client.AddClient(uuid, clientSession)
 	ctx, cancel := context.WithCancel(c.Request.Context())
-	defer cancel()
 	clientSession.SetContext(ctx)
+	defer func() {
+		cancel()
+		client.RemoveClient(uuid)
+	}()
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -45,16 +51,13 @@ func Handle(c *gin.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			goto FINISH
+			return
 		case msg, ok := <-channel:
 			if !ok {
-				break
+				return
 			}
 			c.SSEvent(msg.Name, msg.Content)
 			c.Writer.Flush()
 		}
 	}
-
-FINISH:
-	client.RemoveClient(uuid)
 }
