@@ -9,10 +9,10 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
@@ -21,7 +21,7 @@ jobs:
         working-directory: ./ui/
       - run: npm run build
         working-directory: ./ui/
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
           name: ui
           path: ./ui/dist
@@ -34,12 +34,12 @@ jobs:
         goos: [linux]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'backend/go.mod'
           cache-dependency-path: 'backend/go.sum'
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
           name: ui
           path: backend/embed/ui
@@ -65,12 +65,12 @@ jobs:
         goos: [darwin]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'backend/go.mod'
           cache-dependency-path: 'backend/go.sum'
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v4
         with:
           name: ui
           path: backend/embed/ui
