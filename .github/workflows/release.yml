@@ -50,7 +50,7 @@ jobs:
         working-directory: ./backend
         run: |
           env GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o als-${{ matrix.goos }}-${{ matrix.goarch }}
-      - uses: svenstaro/upload-release-action@v2.11.5
+      - uses: svenstaro/upload-release-action@2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -81,7 +81,7 @@ jobs:
         working-directory: ./backend
         run: |
           env GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o als-${{ matrix.goos }}-${{ matrix.goarch }}
-      - uses: svenstaro/upload-release-action@v2.11.5
+      - uses: svenstaro/upload-release-action@2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}
