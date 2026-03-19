@@ -1,7 +1,4 @@
 name: 'docker image build'
-permissions:
-  contents: read
-  pull-requests: write
 
 on:
   #schedule:
