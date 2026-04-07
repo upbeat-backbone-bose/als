@@ -85,13 +85,13 @@ onUnmounted(() => {
     <n-alert v-if="working && port" :title="t('iperf3_connect_help')" type="info">
       <n-space vertical>
         <template v-if="appStore.config.public_ipv4">
-          // IPv4
+          <!-- IPv4 -->
           <Copy :value="'iperf3 -c ' + appStore.config.public_ipv4 + ' -p ' + port"
             >iperf3 -c {{ appStore.config.public_ipv4 }} -p {{ port }}</Copy
           >
         </template>
         <template v-if="appStore.config.public_ipv6">
-          // IPv6
+          <!-- IPv6 -->
           <Copy :value="'iperf3 -c ' + appStore.config.public_ipv6 + ' -p ' + port"
             >iperf3 -c {{ appStore.config.public_ipv6 }} -p {{ port }}</Copy
           >

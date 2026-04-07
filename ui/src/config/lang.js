@@ -81,7 +81,6 @@ export const list = [
   }
 ]
 
-const locales = list.map((x) => x.value)
 export const getLangByCode = (locale) => {
   return list.find((item) => item.value === locale) ?? null
 }
@@ -93,8 +92,8 @@ const i18n = createI18n({
 })
 
 // copy from https://vue-i18n.intlify.dev/guide/advanced/lazy.html
-export function setupI18n() {
-  loadLocaleMessages(DEFAULT_LOCALE)
+export async function setupI18n() {
+  await loadLocaleMessages(DEFAULT_LOCALE)
   setI18nLanguage(DEFAULT_LOCALE)
 
   return i18n
@@ -111,11 +110,15 @@ export function setI18nLanguage(locale) {
   localStorage.setItem(LOCALE_STORAGE_KEY, normalizedLocale)
 }
 
+const loadedLocales = new Set()
+
 export async function loadLocaleMessages(locale) {
   const normalizedLocale = getLangByCode(locale)?.value ?? DEFAULT_LOCALE
-  const messages = await import(`../locales/${normalizedLocale}.json`)
+  if (loadedLocales.has(normalizedLocale)) return
 
+  const messages = await import(`../locales/${normalizedLocale}.json`)
   i18n.global.setLocaleMessage(normalizedLocale, messages.default)
+  loadedLocales.add(normalizedLocale)
 
   return nextTick()
 }
@@ -129,9 +132,23 @@ export async function autoLang() {
   }
 
   const browserLocales = navigator.languages?.length ? navigator.languages : [navigator.language]
+
+  // Exact match first
   for (const browserLocale of browserLocales) {
     for (const lang of list) {
       if (lang.autoChangeMap.includes(browserLocale)) {
+        await loadLocaleMessages(lang.value)
+        setI18nLanguage(lang.value)
+        return lang.value
+      }
+    }
+  }
+
+  // Prefix fallback (e.g. 'zh-TW' -> 'zh' matches 'zh-CN')
+  for (const browserLocale of browserLocales) {
+    const prefix = browserLocale.split('-')[0]
+    for (const lang of list) {
+      if (lang.autoChangeMap.some((m) => m.split('-')[0] === prefix)) {
         await loadLocaleMessages(lang.value)
         setI18nLanguage(lang.value)
         return lang.value
