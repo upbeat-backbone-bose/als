@@ -1,4 +1,4 @@
-import { zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
+import { zhCN, dateZhCN, enUS, dateEnUS, ruRU, dateRuRU } from 'naive-ui'
 import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 
@@ -16,6 +16,13 @@ export const list = [
     autoChangeMap: ['en-US', 'en'],
     uiLang: () => enUS,
     dateLang: () => dateEnUS
+  },
+  {
+    label: 'Русский',
+    value: 'ru-RU',
+    autoChangeMap: ['ru-RU', 'ru'],
+    uiLang: () => ruRU,
+    dateLang: () => dateRuRU
   }
 ]
 

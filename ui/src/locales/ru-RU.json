@@ -1,0 +1,21 @@
+{
+    "server_info": "Информация о сервере",
+    "server_location": "Локация сервера",
+    "server_speedtest": "Тест скорости сервера",
+    "file_speedtest": "Тест загрузки файлов",
+    "file_ipv4_speedtest": "Тест загрузки по IPv4",
+    "file_ipv6_speedtest": "Тест загрузки по IPv6",
+    "librespeed_begin": "Начать тест",
+    "librespeed_stop": "Остановить тест",
+    "librespeed_upload": "Загрузка",
+    "librespeed_download": "Загрузка",
+    "network_tools": "Сетевые инструменты",
+    "server_bandwidth_graph": "Диаграмма пропускной способности сервера",
+    "server_bandwidth_graph_receive": "Получено",
+    "server_bandwidth_graph_sended": "Отправлено",
+    "ipv4_address": "IPv4-адрес",
+    "ipv6_address": "IPv6-адрес",
+    "my_address": "Ваш текущий IP-адрес",
+    "sponsor_message": "Сообщение спонсора",
+    "memory_usage": "Использование памяти"
+  }
