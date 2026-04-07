@@ -5,6 +5,9 @@ on:
     tags:
       - '*'
 
+permissions:
+  contents: write
+
 jobs:
   build-ui:
     runs-on: ubuntu-latest
@@ -50,11 +53,21 @@ jobs:
         working-directory: ./backend
         run: |
           env GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o als-${{ matrix.goos }}-${{ matrix.goarch }}
+      - name: Generate Linux checksum
+        working-directory: ./backend
+        run: |
+          sha256sum als-${{ matrix.goos }}-${{ matrix.goarch }} > als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
       - uses: svenstaro/upload-release-action@2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}
           asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}
+          tag: ${{ github.ref }}
+      - uses: svenstaro/upload-release-action@2.11.5
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+          asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
           tag: ${{ github.ref }}
           
   build-macos:
@@ -81,9 +94,19 @@ jobs:
         working-directory: ./backend
         run: |
           env GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o als-${{ matrix.goos }}-${{ matrix.goarch }}
+      - name: Generate macOS checksum
+        working-directory: ./backend
+        run: |
+          sha256sum als-${{ matrix.goos }}-${{ matrix.goarch }} > als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
       - uses: svenstaro/upload-release-action@2.11.5
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}
           asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}
+          tag: ${{ github.ref }}
+      - uses: svenstaro/upload-release-action@2.11.5
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+          asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
           tag: ${{ github.ref }}

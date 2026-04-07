@@ -8,6 +8,10 @@ on:
     tags:
       - '*'
 
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
 
 jobs:
   docker:
@@ -37,3 +41,5 @@ jobs:
           platforms: linux/amd64,linux/arm64/v8
           push: true
           tags: ryachueng/looking-glass-server:latest
+          sbom: true
+          provenance: true
