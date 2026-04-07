@@ -1,9 +1,11 @@
 <script setup>
 import { useAppStore } from '@/stores/app'
+import { useI18n } from 'vue-i18n'
 const appStore = useAppStore()
 import { shallowRef, computed, defineAsyncComponent, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 const { config } = storeToRefs(appStore)
+const { t } = useI18n({ useScope: 'global' })
 const _v = (loader) => {
   return defineAsyncComponent({
     loader: loader,
@@ -13,36 +15,38 @@ const _v = (loader) => {
 
 const tools = ref([
   {
-    label: 'Ping',
+    labelKey: 'tool_ping',
     show: false,
     enable: false,
+    configKey: 'feature_ping',
     componentNode: _v(() => import('./Utilities/Ping.vue'))
   },
   {
-    label: 'IPerf3',
+    labelKey: 'tool_iperf3',
     show: false,
     enable: false,
+    configKey: 'feature_iperf3',
     componentNode: _v(() => import('./Utilities/IPerf3.vue'))
   },
   {
-    label: 'Speedtest.net',
+    labelKey: 'tool_speedtest_net',
     show: false,
     enable: false,
+    configKey: 'feature_speedtest_dot_net',
     componentNode: _v(() => import('./Utilities/SpeedtestNet.vue'))
   },
   {
-    label: 'Shell',
+    labelKey: 'tool_shell',
     show: false,
     enable: false,
+    configKey: 'feature_shell',
     componentNode: _v(() => import('./Utilities/Shell.vue'))
   }
 ])
 
 onMounted(() => {
   for (var tool of tools.value) {
-    const configKey = 'feature_' + tool.label.toLowerCase().replace('.', '_dot_')
-    console.log(configKey, config.value[configKey])
-    tool.enable = config.value[configKey] ?? false
+    tool.enable = config.value[tool.configKey] ?? false
   }
 })
 
@@ -81,7 +85,7 @@ const hasToolEnable = computed(() => {
 const toolComponentLabel = computed(() => {
   for (const tool of tools.value) {
     if (tool.show) {
-      return tool.label
+      return t(tool.labelKey)
     }
   }
   return ''
@@ -97,7 +101,7 @@ const handleDrawClosed = () => {
     <template #header> {{ $t('network_tools') }} </template>
     <n-space>
       <template v-for="tool in tools">
-        <n-button v-if="tool.enable" @click="tool.show = true">{{ tool.label }}</n-button>
+        <n-button v-if="tool.enable" @click="tool.show = true">{{ t(tool.labelKey) }}</n-button>
       </template>
     </n-space>
   </n-card>

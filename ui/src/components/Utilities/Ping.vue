@@ -1,8 +1,10 @@
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
+import { useI18n } from 'vue-i18n'
 
 const appStore = useAppStore()
+const { t } = useI18n({ useScope: 'global' })
 const working = ref(false)
 const records = ref([])
 const host = ref('')
@@ -56,12 +58,12 @@ const ping = async () => {
       <n-input
         :disabled="working"
         v-model:value="host"
-        placeholder="IP Address Or Domain"
+        :placeholder="t('ping_placeholder')"
         @keyup.enter="ping"
       />
       <n-button :type="working ? 'error' : 'primary'" ghost @click="working ? stopPing() : ping()">
-        <template v-if="working"> Stop </template>
-        <template v-else> Ping </template>
+        <template v-if="working"> {{ t('stop') }} </template>
+        <template v-else> {{ t('tool_ping') }} </template>
         <n-spin v-if="working" :size="16" style="margin-left: 5px"></n-spin>
       </n-button>
     </n-input-group>
@@ -69,9 +71,9 @@ const ping = async () => {
       <thead>
         <tr>
           <th>#</th>
-          <th>Host</th>
-          <th>TTL</th>
-          <th>Latency</th>
+          <th>{{ t('host') }}</th>
+          <th>{{ t('ttl') }}</th>
+          <th>{{ t('latency') }}</th>
         </tr>
       </thead>
       <tbody>

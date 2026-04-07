@@ -6,6 +6,16 @@
 
 # ALS - 另一个 Looking-glass 服务器
 
+## 当前支持的界面语言
+- English
+- 简体中文
+- Русский
+- Deutsch
+- Español
+- Français
+- 日本語
+- 한국어
+
 ## 快速开始 (Docker 环境)
 ```
 docker run -d --name looking-glass --restart always --network host ryachueng/looking-glass-server

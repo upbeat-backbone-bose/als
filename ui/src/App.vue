@@ -1,6 +1,13 @@
 <script setup>
 import { darkTheme, useOsTheme } from 'naive-ui'
-import { list as langList, setI18nLanguage, loadLocaleMessages, autoLang } from './config/lang.js'
+import {
+  list as langList,
+  setI18nLanguage,
+  loadLocaleMessages,
+  autoLang,
+  DEFAULT_LOCALE,
+  getLangByCode
+} from './config/lang.js'
 import { useAppStore } from './stores/app'
 import LoadingCard from '@/components/Loading.vue'
 import InfoCard from '@/components/Information.vue'
@@ -17,15 +24,9 @@ const dateLang = computed(() => {
   return currentLang.value.dateLang()
 })
 
-const currentLangCode = ref('en-US')
+const currentLangCode = ref(DEFAULT_LOCALE)
 const currentLang = computed(() => {
-  for (var i in langList) {
-    const _lang = langList[i]
-    if (_lang.value == currentLangCode.value) {
-      return _lang
-    }
-  }
-  return null
+  return getLangByCode(currentLangCode.value) ?? getLangByCode(DEFAULT_LOCALE)
 })
 
 const langDropdown = computed(() => {
@@ -56,7 +57,7 @@ onMounted(async () => {
     <n-global-style />
     <n-message-provider>
       <n-space vertical>
-        <h2>Looking Glass Server</h2>
+        <h2>{{ $t('app_title') }}</h2>
         <LoadingCard v-if="appStore.connecting" />
         <template v-else>
           <InfoCard />
@@ -67,7 +68,7 @@ onMounted(async () => {
         <n-space justify="space-between">
           <div>
             <div style="margin-top: 10px">
-              Powered by
+              {{ $t('powered_by') }}
               <n-button
                 text
                 tag="a"

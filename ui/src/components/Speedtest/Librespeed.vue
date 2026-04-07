@@ -1,8 +1,10 @@
 <script setup>
 import { useAppStore } from '@/stores/app'
-import { onMounted, toRaw } from 'vue'
+import { toRaw, watch } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
+import { useI18n } from 'vue-i18n'
 const appStore = useAppStore()
+const { t, locale } = useI18n({ useScope: 'global' })
 
 let workerInstance = null
 let workerTimer = null
@@ -58,7 +60,7 @@ const baseChartOptions = {
 }
 const baseSeries = {
   type: 'area',
-  name: 'Receive',
+  name: t('download'),
   data: []
 }
 const charts = ref({
@@ -72,7 +74,7 @@ const charts = ref({
   upload: {
     ref: null,
     options: { ...baseChartOptions },
-    series: [{ ...baseSeries }],
+    series: [{ ...baseSeries, name: t('upload') }],
     data: [],
     categories: []
   }
@@ -129,7 +131,7 @@ const startOrStopSpeedtest = (force = false) => {
       })
       chartUploadRef.value.updateSeries([
         {
-          name: 'Receive',
+          name: t('upload'),
           data: toRaw(charts.value.upload.data)
         }
       ])
@@ -147,7 +149,7 @@ const startOrStopSpeedtest = (force = false) => {
       })
       chartDownloadRef.value.updateSeries([
         {
-          name: 'Receive',
+          name: t('download'),
           data: toRaw(charts.value.download.data)
         }
       ])
@@ -166,6 +168,27 @@ const startOrStopSpeedtest = (force = false) => {
     workerInstance.postMessage('status')
   }, 200)
 }
+
+watch(locale, () => {
+  charts.value.download.series[0].name = t('download')
+  charts.value.upload.series[0].name = t('upload')
+  if (chartDownloadRef.value) {
+    chartDownloadRef.value.updateSeries([
+      {
+        name: t('download'),
+        data: toRaw(charts.value.download.data)
+      }
+    ])
+  }
+  if (chartUploadRef.value) {
+    chartUploadRef.value.updateSeries([
+      {
+        name: t('upload'),
+        data: toRaw(charts.value.upload.data)
+      }
+    ])
+  }
+})
 </script>
 
 <template>

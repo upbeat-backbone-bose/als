@@ -1,10 +1,12 @@
 <script setup>
 import { useAppStore } from '@/stores/app'
-import { onUnmounted, toRaw } from 'vue'
+import { onUnmounted, toRaw, watch } from 'vue'
 import { formatBytes } from '@/helper/unit'
 import VueApexCharts from 'vue3-apexcharts'
+import { useI18n } from 'vue-i18n'
 
 const appStore = useAppStore()
+const { t, locale } = useI18n({ useScope: 'global' })
 const interfaces = ref({})
 const handleCache = (e) => {
   const data = JSON.parse(e.data)
@@ -109,12 +111,12 @@ const createGraph = (interfaceName) => {
     series: [
       {
         type: 'area',
-        name: 'Receive',
+        name: t('receive'),
         data: []
       },
       {
         type: 'area',
-        name: 'Send',
+        name: t('send'),
         data: []
       }
     ]
@@ -186,15 +188,32 @@ const updateSerieByInterface = (interfaceName, iface, date = null, pointname = n
 
   iface.ref.updateSeries([
     {
-      name: 'Receive',
+      name: t('receive'),
       data: toRaw(receiveDatas)
     },
     {
-      name: 'Send',
+      name: t('send'),
       data: toRaw(sendDatas)
     }
   ])
 }
+
+watch(locale, () => {
+  for (const iface of Object.values(interfaces.value)) {
+    if (!iface.ref) continue
+    iface.ref.updateSeries([
+      {
+        name: t('receive'),
+        data: toRaw(iface.lines[0])
+      },
+      {
+        name: t('send'),
+        data: toRaw(iface.lines[1])
+      }
+    ])
+  }
+})
+
 onMounted(() => {
   appStore.source.addEventListener('InterfaceCache', handleCache)
   appStore.source.addEventListener('InterfaceTraffic', handleTrafficUpdate)

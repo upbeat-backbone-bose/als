@@ -1,12 +1,14 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
-import '@xterm/xterm/css/xterm.css'
-import { Terminal } from '@xterm/xterm'
+import 'xterm/css/xterm.css'
+import { Terminal } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import Copy from '../Copy.vue'
+import { useI18n } from 'vue-i18n'
 
 const appStore = useAppStore()
+const { t } = useI18n({ useScope: 'global' })
 const working = ref(false)
 const port = ref(0)
 const timeout = ref(0)
@@ -55,7 +57,7 @@ const stopServer = () => {
   appStore.source.removeEventListener('Iperf3', handlePortChange)
   appStore.source.removeEventListener('Iperf3Stream', handleMessage)
   abortController.abort('Unmounted')
-  terminal.writeln('IPerf3 Server stoped')
+  terminal.writeln(t('iperf3_server_stopped'))
 }
 onUnmounted(() => {
   stopServer()
@@ -70,8 +72,8 @@ onUnmounted(() => {
       ghost
       @click="!working ? startServer() : stopServer()"
     >
-      <span v-if="!working"> 启动 iPerf3 服务器 </span>
-      <span v-else> 停止 iPerf3 服务器 </span>
+      <span v-if="!working"> {{ t('iperf3_start_server') }} </span>
+      <span v-else> {{ t('iperf3_stop_server') }} </span>
     </n-button>
     <n-progress
       v-show="timeout != 0"
@@ -80,7 +82,7 @@ onUnmounted(() => {
       :percentage="100 - timeoutPercentage"
       :show-indicator="false"
     />
-    <n-alert v-if="working && port" title="您可以使用以下命令来连接 IPerf3 服务器" type="info">
+    <n-alert v-if="working && port" :title="t('iperf3_connect_help')" type="info">
       <n-space vertical>
         <template v-if="appStore.config.public_ipv4">
           // IPv4

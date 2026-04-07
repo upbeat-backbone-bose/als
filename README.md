@@ -6,6 +6,16 @@ Language: English | [简体中文](README_zh_CN.md)
 
 # ALS - Another Looking-glass Server
 
+## Supported UI Languages
+- English
+- Simplified Chinese
+- Russian
+- German
+- Spanish
+- French
+- Japanese
+- Korean
+
 ## Quick start
 ```
 docker run -d --name looking-glass --restart always --network host ryachueng/looking-glass-server
