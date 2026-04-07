@@ -88,7 +88,8 @@ export const getLangByCode = (locale) => {
 const i18n = createI18n({
   locale: DEFAULT_LOCALE,
   fallbackLocale: DEFAULT_LOCALE,
-  legacy: false
+  legacy: false,
+  globalInjection: true
 })
 
 // copy from https://vue-i18n.intlify.dev/guide/advanced/lazy.html
