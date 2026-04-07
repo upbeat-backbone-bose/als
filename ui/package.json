@@ -45,7 +45,7 @@
     "v-clipboard": "3.0.0-next.1",
     "vite": "^8.0.5",
     "vue-eslint-parser": "^10.4.0",
-    "vue-i18n": "^11.3.0",
+    "vue-i18n": "^11.3.1",
     "vue3-apexcharts": "^1.11.1",
     "vue3-markdown-it": "^1.0.10"
   }
