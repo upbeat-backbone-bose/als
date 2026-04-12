@@ -31,7 +31,7 @@ jobs:
         run: npm run build
         working-directory: ./ui
       - name: Upload UI artifact
-        uses: actions/upload-artifact@v7.0.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: ui
           path: ./ui/dist
