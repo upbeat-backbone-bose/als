@@ -34,7 +34,6 @@ FROM alpine:3
 LABEL maintainer="upbeat-backbone-bose <pnlife@gmail.com>"
 LABEL org.opencontainers.image.source="https://github.com/upbeat-backbone-bose/als"
 LABEL org.opencontainers.image.description="Another Looking-glass Server"
-LABEL org.opencontainers.image.version="$APP_VERSION"
 
 COPY --from=builder_env / /
 COPY --from=builder_golang --chmod=777 /app/als/als /bin/als
