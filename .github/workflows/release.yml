@@ -20,21 +20,25 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
-      - run: npm i
-        working-directory: ./ui/
-      - run: npm run build
-        working-directory: ./ui/
-      - uses: actions/upload-artifact@v7.0.1
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./ui
+      - name: Build UI
+        run: npm run build
+        working-directory: ./ui
+      - name: Upload UI artifact
+        uses: actions/upload-artifact@v7
         with:
-          name: ui
-          path: ./ui/dist
-          
-  build-linux:
+          name: ui-dist
+          path: ui/dist
+          retention-days: 5
+
+  build-binary:
     runs-on: ubuntu-latest
     needs: build-ui
     strategy:
       matrix:
-        goos: [linux]
+        goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v6.0.2
@@ -42,71 +46,45 @@ jobs:
         with:
           go-version-file: 'backend/go.mod'
           cache-dependency-path: 'backend/go.sum'
-      - uses: actions/download-artifact@v8.0.1
+      - name: Download UI artifact
+        uses: actions/download-artifact@v8
         with:
-          name: ui
+          name: ui-dist
           path: backend/embed/ui
       - name: Tidy Go modules
         run: go mod tidy
         working-directory: ./backend
-      - name: Build for Linux
+      - name: Install UPX
+        if: matrix.goos == 'linux'
+        run: |
+          UPX_VERSION=$(curl -sL https://api.github.com/repos/upx/upx/releases/latest | grep '"tag_name"' | sed 's/.*v\([0-9.]*\).*/\1/')
+          wget -q https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz -O /tmp/upx.tar.xz
+          tar -xf /tmp/upx.tar.xz -C /tmp
+          sudo cp /tmp/upx-*/upx /usr/local/bin/
+          upx --version
+        shell: bash
+      - name: Build binary
         working-directory: ./backend
         run: |
-          env GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o als-${{ matrix.goos }}-${{ matrix.goarch }}
-      - name: Generate Linux checksum
+          ext=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
+          env GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -ldflags="-s -w" -o als-${{ matrix.goos }}-${{ matrix.goarch }}${ext}
+      - name: Generate checksum
         working-directory: ./backend
         run: |
-          sha256sum als-${{ matrix.goos }}-${{ matrix.goarch }} > als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-      - uses: svenstaro/upload-release-action@2.11.5
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}
-          asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}
-          tag: ${{ github.ref }}
-      - uses: svenstaro/upload-release-action@2.11.5
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-          asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-          tag: ${{ github.ref }}
-          
-  build-macos:
-    runs-on: ubuntu-latest
-    needs: build-ui
-    strategy:
-      matrix:
-        goos: [darwin]
-        goarch: [amd64, arm64]
-    steps:
-      - uses: actions/checkout@v6.0.2
-      - uses: actions/setup-go@v6.4.0
-        with:
-          go-version-file: 'backend/go.mod'
-          cache-dependency-path: 'backend/go.sum'
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: ui
-          path: backend/embed/ui
-      - name: Tidy Go modules
-        run: go mod tidy
-        working-directory: ./backend
-      - name: Build for macOS
-        working-directory: ./backend
+          ext=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
+          sha256sum als-${{ matrix.goos }}-${{ matrix.goarch }}${ext} > als-${{ matrix.goos }}-${{ matrix.goarch }}${ext}.sha256
+      - name: Compress with UPX
+        if: matrix.goos == 'linux'
         run: |
-          env GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o als-${{ matrix.goos }}-${{ matrix.goarch }}
-      - name: Generate macOS checksum
-        working-directory: ./backend
-        run: |
-          sha256sum als-${{ matrix.goos }}-${{ matrix.goarch }} > als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-      - uses: svenstaro/upload-release-action@2.11.5
+          which upx && upx -9 backend/als-linux-${{ matrix.goarch }} || echo "UPX compression skipped"
+        shell: bash
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v3
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}
-          asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}
-          tag: ${{ github.ref }}
-      - uses: svenstaro/upload-release-action@2.11.5
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: backend/als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-          asset_name: als-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-          tag: ${{ github.ref }}
+          files: |
+            backend/als-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+            backend/als-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

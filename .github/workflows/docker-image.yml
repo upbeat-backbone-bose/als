@@ -1,8 +1,6 @@
 name: 'docker image build'
 
 on:
-  #schedule:
-  #- cron: "0 0 */7 * *"
   workflow_dispatch:
   push:
     tags:
@@ -14,32 +12,71 @@ permissions:
   id-token: write
 
 jobs:
+  build-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v6.3.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./ui
+      - name: Build UI
+        run: npm run build
+        working-directory: ./ui
+      - name: Upload UI artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-dist
+          path: ui/dist
+          retention-days: 5
+
   docker:
     runs-on: ubuntu-latest
+    needs: build-ui
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
           submodules: recursive
-      -
-        name: Set up QEMU
+      - name: Download UI artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ui-dist
+          path: backend/embed/ui
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v4.0.0
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.0.0
-      -
-        name: Login to DockerHub
+      - name: Login to DockerHub
         uses: docker/login-action@v4.1.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build and push
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ryachueng/looking-glass-server
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build and push
         uses: docker/build-push-action@v7.1.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64/v8
           push: true
-          tags: ryachueng/looking-glass-server:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           sbom: true
           provenance: true
