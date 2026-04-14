@@ -10,7 +10,28 @@ permissions:
 
 jobs:
   build-ui:
-    uses: ./.github/workflows/shared/build-ui.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v6.3.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./ui
+      - name: Build UI
+        run: npm run build
+        working-directory: ./ui
+      - name: Upload UI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: ui/dist
+          retention-days: 5
 
   build-binary:
     runs-on: ubuntu-latest
@@ -29,9 +50,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: ui_dist
-      - name: Extract UI
-        run: tar -xzf ui_dist/ui.tar.gz && mv dist backend/embed/ui
+          path: backend/embed/ui
+      - name: Tidy Go modules
+        run: go mod tidy
+        working-directory: ./backend
       - name: Install UPX
         if: matrix.goos == 'linux'
         run: |
@@ -40,9 +62,7 @@ jobs:
           tar -xf /tmp/upx.tar.xz -C /tmp
           sudo cp /tmp/upx-*/upx /usr/local/bin/
           upx --version
-      - name: Tidy Go modules
-        run: go mod tidy
-        working-directory: ./backend
+        shell: bash
       - name: Build binary
         working-directory: ./backend
         run: |
