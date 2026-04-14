@@ -32,9 +32,18 @@ RUN rm -rf /app
 
 FROM alpine:3
 LABEL maintainer="upbeat-backbone-bose <pnlife@gmail.com>"
+LABEL org.opencontainers.image.source="https://github.com/upbeat-backbone-bose/als"
+LABEL org.opencontainers.image.description="Another Looking-glass Server"
+LABEL org.opencontainers.image.version="$APP_VERSION"
+
 COPY --from=builder_env / /
 COPY --from=builder_golang --chmod=777 /app/als/als /bin/als
-# 更新基础包并清理缓存
-RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
+
+RUN apk upgrade --no-cache && rm -rf /var/cache/apk/*
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:80 || exit 1
+
+EXPOSE 80
 
 CMD ["als"]
