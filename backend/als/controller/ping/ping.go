@@ -16,7 +16,7 @@ func Handle(c *gin.Context) {
 	if !ok {
 		c.JSON(400, &gin.H{
 			"success": false,
-			"error":   "Invaild IP Address",
+			"error":   "Invalid IP Address",
 		})
 		return
 	}
@@ -25,7 +25,7 @@ func Handle(c *gin.Context) {
 	if err != nil {
 		c.JSON(400, &gin.H{
 			"success": false,
-			"error":   "Invaild IP Address",
+			"error":   "Invalid IP Address",
 		})
 		return
 	}
