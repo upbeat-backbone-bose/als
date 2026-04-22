@@ -59,6 +59,8 @@ markdown_extensions:
       permalink: true
 
 extra:
+  # 添加文档部署 URL
+  site_url: https://upbeat-backbone-bose.github.io/als/
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/upbeat-backbone-bose/als
