@@ -75,8 +75,6 @@ jobs:
           images: ryachueng/looking-glass-server
           tags: |
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
-            type=semver,pattern={{major}},enable=${{ github.event_name == 'release' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
             type=raw,value=test,enable=${{ github.event.inputs.docker_tags == 'test' }}
       - name: Build and push
