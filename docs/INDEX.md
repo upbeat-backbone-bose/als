@@ -27,7 +27,6 @@
 - [后端核心模块](./模块/backend.md) - Go 后端核心逻辑
 - [前端模块](./模块/ui.md) - Vue.js 前端界面
 - [配置模块](./模块/config.md) - 配置加载和管理
-- [ALS 模块](./模块/als.md) - 网络工具控制器
 - [FakeShell 模块](./模块/fakeshell.md) - 限制性 shell 实现
 
 ## 项目概述
