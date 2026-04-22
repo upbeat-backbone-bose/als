@@ -1,10 +1,20 @@
 name: 'docker image build'
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
-  push:
-    tags:
-      - '*'
+    inputs:
+      docker_tags:
+        description: 'Docker 镜像标签（多个用逗号分隔）'
+        required: false
+        default: 'test'
+        type: string
+      push_image:
+        description: '是否推送到远程仓库'
+        required: false
+        default: 'false'
+        type: boolean
 
 permissions:
   contents: read
@@ -64,18 +74,17 @@ jobs:
         with:
           images: ryachueng/looking-glass-server
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ github.sha }},enable=true
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}},enable=${{ github.event_name == 'release' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=raw,value=test,enable=${{ github.event.inputs.docker_tags == 'test' }}
       - name: Build and push
         uses: docker/build-push-action@v7.1.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64/v8
-          push: true
+          push: ${{ github.event_name == 'release' || github.event.inputs.push_image == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
