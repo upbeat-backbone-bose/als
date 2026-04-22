@@ -25,32 +25,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install MkDocs dependencies
-        run: |
-          pip install mkdocs mkdocs-material pymdown-extensions
-
-      - name: Build with MkDocs
-        run: |
-          cd docs
-          if [ -f mkdocs.yml ]; then
-            echo "Building with MkDocs..."
-            mkdocs build --verbose --clean
-          fi
-
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # 如果使用了 MkDocs，部署 site 目录
-          # 否则部署 docs 目录本身
-          path: './docs/site'
+          path: './docs'
 
   deploy:
     environment:
