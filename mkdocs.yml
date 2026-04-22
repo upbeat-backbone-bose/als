@@ -17,17 +17,17 @@ markdown_extensions:
   - pymdownx.superfences
 
 nav:
-  - 首页：docs/README.md
+  - 首页：README.md
   - 核心文档:
-    - 系统架构：docs/ARCHITECTURE.md
-    - 接口文档：docs/INTERFACES.md
-    - 开发者指南：docs/DEVELOPER_GUIDE.md
+    - 系统架构：ARCHITECTURE.md
+    - 接口文档：INTERFACES.md
+    - 开发者指南：DEVELOPER_GUIDE.md
   - 专有概念:
-    - 会话机制：docs/专有概念/会话机制.md
-    - 功能开关：docs/专有概念/功能开关.md
-    - 控制台：docs/专有概念/控制台.md
+    - 会话机制：专有概念/会话机制.md
+    - 功能开关：专有概念/功能开关.md
+    - 控制台：专有概念/控制台.md
   - 模块文档:
-    - 后端核心：docs/模块/backend.md
-    - 前端模块：docs/模块/ui.md
-    - 配置模块：docs/模块/config.md
-    - FakeShell：docs/模块/fakeshell.md
+    - 后端核心：模块/backend.md
+    - 前端模块：模块/ui.md
+    - 配置模块：模块/config.md
+    - FakeShell：模块/fakeshell.md
