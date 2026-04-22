@@ -30,4 +30,4 @@ nav:
     - 后端核心：模块/backend.md
     - 前端模块：模块/ui.md
     - 配置模块：模块/config.md
-    - FakeShell：模块/fakeshell.md
+    - "FakeShell": 模块/fakeshell.md
