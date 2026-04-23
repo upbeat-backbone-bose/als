@@ -4,33 +4,32 @@ import (
 	"crypto/rand"
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	fixedChunkSize = 65536
+	maxTotalSize   = 104857600
+)
+
 func HandleDownload(c *gin.Context) {
 	c.Writer.WriteHeader(http.StatusOK)
-	chunks := 4
-	if ckSize, ok := c.GetQuery("ckSize"); ok {
-		if ckSizeInt, err := strconv.Atoi(ckSize); err == nil && ckSizeInt > 0 {
-			chunks = ckSizeInt
-			if chunks > 1024 {
-				chunks = 1024
-			}
+
+	remaining := maxTotalSize
+	for remaining > 0 {
+		size := fixedChunkSize
+		if remaining < fixedChunkSize {
+			size = remaining
 		}
-	}
-
-	data := make([]byte, 1048576)
-	if _, err := rand.Read(data); err != nil {
-		c.Status(http.StatusInternalServerError)
-		return
-	}
-
-	for i := 0; i < chunks; i++ {
+		data := make([]byte, size)
+		if _, err := rand.Read(data); err != nil {
+			return
+		}
 		if _, err := c.Writer.Write(data); err != nil {
 			return
 		}
+		remaining -= size
 	}
 }
 

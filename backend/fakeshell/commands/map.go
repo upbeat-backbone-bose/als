@@ -4,9 +4,25 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+var dangerousPatterns = []string{
+	";", "|", "&", "`", "$(", "${",
+	">", "<", ">>", "<<",
+	"\n", "\r",
+}
+
+func isDangerousArg(arg string) bool {
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(arg, pattern) {
+			return true
+		}
+	}
+	return false
+}
 
 func AddExecutableAsCommand(cmd *cobra.Command, command string, argFilter func(args []string) ([]string, error)) {
 
@@ -17,24 +33,31 @@ func AddExecutableAsCommand(cmd *cobra.Command, command string, argFilter func(a
 				cmd.Println("invalid command")
 				return
 			}
+
+			for _, arg := range args {
+				if isDangerousArg(arg) {
+					cmd.Println("invalid argument detected")
+					return
+				}
+			}
+
 			args, err := argFilter(args)
 			if err != nil {
 				cmd.Println(err)
 				return
 			}
-			// command name comes from predefined menu registration, not user input
-			c := exec.CommandContext(cmd.Context(), command, args...) // #nosec G204
+
+			c := exec.CommandContext(cmd.Context(), command, args...)
 			c.Env = os.Environ()
 			c.Env = append(c.Env, "TERM=xterm-256color")
 			c.Stdin = cmd.InOrStdin()
 			c.Stdout = cmd.OutOrStdout()
-			c.Stderr = cmd.OutOrStderr()
+			c.Stderr = cmd.ErrOrStderr()
 
 			if err := c.Run(); err != nil {
 				cmd.Println(err)
 			}
 		},
-		DisableFlagParsing: true,
 	}
 
 	cmd.AddCommand(cmdDefine)

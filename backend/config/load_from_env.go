@@ -7,29 +7,29 @@ import (
 	"strings"
 )
 
-func LoadFromEnv() {
+func LoadFromEnv(cfg *ALSConfig) {
 	envVarsString := map[string]*string{
-		"LISTEN_IP":       &Config.ListenHost,
-		"HTTP_PORT":       &Config.ListenPort,
-		"LOCATION":        &Config.Location,
-		"PUBLIC_IPV4":     &Config.PublicIPv4,
-		"PUBLIC_IPV6":     &Config.PublicIPv6,
-		"SPONSOR_MESSAGE": &Config.SponsorMessage,
+		"LISTEN_IP":       &cfg.ListenHost,
+		"HTTP_PORT":       &cfg.ListenPort,
+		"LOCATION":        &cfg.Location,
+		"PUBLIC_IPV4":     &cfg.PublicIPv4,
+		"PUBLIC_IPV6":     &cfg.PublicIPv6,
+		"SPONSOR_MESSAGE": &cfg.SponsorMessage,
 	}
 
 	envVarsInt := map[string]*int{
-		"UTILITIES_IPERF3_PORT_MIN": &Config.Iperf3StartPort,
-		"UTILITIES_IPERF3_PORT_MAX": &Config.Iperf3EndPort,
+		"UTILITIES_IPERF3_PORT_MIN": &cfg.Iperf3StartPort,
+		"UTILITIES_IPERF3_PORT_MAX": &cfg.Iperf3EndPort,
 	}
 
 	envVarsBool := map[string]*bool{
-		"DISPLAY_TRAFFIC":           &Config.FeatureIfaceTraffic,
-		"ENABLE_SPEEDTEST":          &Config.FeatureLibrespeed,
-		"UTILITIES_SPEEDTESTDOTNET": &Config.FeatureSpeedtestDotNet,
-		"UTILITIES_PING":            &Config.FeaturePing,
-		"UTILITIES_FAKESHELL":       &Config.FeatureShell,
-		"UTILITIES_IPERF3":          &Config.FeatureIperf3,
-		"UTILITIES_MTR":             &Config.FeatureMTR,
+		"DISPLAY_TRAFFIC":           &cfg.FeatureIfaceTraffic,
+		"ENABLE_SPEEDTEST":          &cfg.FeatureLibrespeed,
+		"UTILITIES_SPEEDTESTDOTNET": &cfg.FeatureSpeedtestDotNet,
+		"UTILITIES_PING":            &cfg.FeaturePing,
+		"UTILITIES_FAKESHELL":       &cfg.FeatureShell,
+		"UTILITIES_IPERF3":          &cfg.FeatureIperf3,
+		"UTILITIES_MTR":             &cfg.FeatureMTR,
 	}
 
 	for envVar, configField := range envVarsString {
@@ -42,6 +42,7 @@ func LoadFromEnv() {
 		if v := os.Getenv(envVar); len(v) != 0 {
 			v, err := strconv.Atoi(v)
 			if err != nil {
+				log.Printf("Invalid int value for %s: %v", envVar, err)
 				continue
 			}
 			*configField = v
@@ -50,13 +51,18 @@ func LoadFromEnv() {
 
 	for envVar, configField := range envVarsBool {
 		if v := os.Getenv(envVar); len(v) != 0 {
-			*configField = v == "true"
+			if v == "true" {
+				*configField = true
+			} else if v == "false" {
+				*configField = false
+			}
+			// 其他值保持原样
 		}
 	}
 
 	if v := os.Getenv("SPEEDTEST_FILE_LIST"); len(v) != 0 {
 		fileLists := strings.Split(v, " ")
-		Config.SpeedtestFileList = fileLists
+		cfg.SpeedtestFileList = fileLists
 	}
 
 	if !IsInternalCall {

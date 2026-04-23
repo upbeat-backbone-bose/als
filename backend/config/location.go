@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func updateLocation() {
+func updateLocation(cfg *ALSConfig) {
 	log.Default().Println("Updating server location from internet...")
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -38,7 +38,7 @@ func updateLocation() {
 		return
 	}
 
-	Config.Location = fmt.Sprintf("%s, %s", data["city"], data["country_name"])
-	log.Default().Println("Server location: " + Config.Location)
+	cfg.Location = fmt.Sprintf("%s, %s", data["city"], data["country_name"])
+	log.Default().Println("Server location: " + cfg.Location)
 	log.Default().Println("Updating server location from internet successed, from ipapi.co")
 }

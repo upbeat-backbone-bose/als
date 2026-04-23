@@ -1,6 +1,14 @@
 package http
 
 import (
+	"context"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,5 +35,29 @@ func (e *Server) SetListen(listen string) {
 }
 
 func (e *Server) Start() error {
-	return e.engine.Run(e.listen)
+	srv := &http.Server{
+		Addr:         e.listen,
+		Handler:      e.engine,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+		log.Println("Shutting down server...")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("Server shutdown error: %v", err)
+		}
+
+		log.Println("Server exited")
+	}()
+
+	return srv.ListenAndServe()
 }

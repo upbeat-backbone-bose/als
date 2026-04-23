@@ -8,39 +8,39 @@ import (
 
 const sessionExpireDuration = 24 * time.Hour
 
-var (
-	clientsMu sync.RWMutex
-	Clients   = make(map[string]*ClientSession)
-)
-
 type Message struct {
 	Name    string
 	Content string
 }
 
 type ClientSession struct {
-	Channel    chan *Message
-	ctx        context.Context
-	CreatedAt  time.Time
-	cancelFunc context.CancelFunc
+	Channel   chan *Message
+	CreatedAt time.Time
+	ctx       context.Context
+	onClose   func()
 }
 
-func (c *ClientSession) SetContext(ctx context.Context) {
-	c.ctx = ctx
+func NewClientSession(ctx context.Context, onClose func()) *ClientSession {
+	return &ClientSession{
+		Channel:   make(chan *Message, 64),
+		CreatedAt: time.Now(),
+		ctx:       ctx,
+		onClose:   onClose,
+	}
 }
 
-func (c *ClientSession) GetContext(requestCtx context.Context) context.Context {
-	ctx, cancel := context.WithCancel(requestCtx)
-	c.cancelFunc = cancel
-	go func() {
-		select {
-		case <-c.ctx.Done():
-			cancel()
-		case <-ctx.Done():
-			cancel()
-		}
-	}()
-	return ctx
+func (c *ClientSession) Context() context.Context {
+	return c.ctx
+}
+
+func (c *ClientSession) SetOnClose(fn func()) {
+	c.onClose = fn
+}
+
+func (c *ClientSession) Close() {
+	if c.onClose != nil {
+		c.onClose()
+	}
 }
 
 func (c *ClientSession) TrySend(msg *Message) bool {
@@ -52,64 +52,110 @@ func (c *ClientSession) TrySend(msg *Message) bool {
 	}
 }
 
-func AddClient(id string, session *ClientSession) {
-	clientsMu.Lock()
-	defer clientsMu.Unlock()
-	Clients[id] = session
+type ClientManager struct {
+	mu       sync.RWMutex
+	clients  map[string]*ClientSession
+	queueMgr *QueueManager
 }
 
-func GetClient(id string) (*ClientSession, bool) {
-	clientsMu.RLock()
-	defer clientsMu.RUnlock()
-	session, ok := Clients[id]
+func NewClientManager() *ClientManager {
+	return &ClientManager{
+		clients:  make(map[string]*ClientSession),
+		queueMgr: NewQueueManager(),
+	}
+}
+
+func (m *ClientManager) AddClient(id string, session *ClientSession) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.clients[id] = session
+}
+
+func (m *ClientManager) GetClient(id string) (*ClientSession, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	session, ok := m.clients[id]
 	if ok && time.Since(session.CreatedAt) > sessionExpireDuration {
 		return nil, false
 	}
 	return session, ok
 }
 
-func RemoveClient(id string) {
-	clientsMu.Lock()
-	defer clientsMu.Unlock()
-	if client, ok := Clients[id]; ok && client.cancelFunc != nil {
-		client.cancelFunc()
+func (m *ClientManager) RemoveClient(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if client, ok := m.clients[id]; ok {
+		client.Close()
 	}
-	delete(Clients, id)
+	delete(m.clients, id)
 }
 
-func RemoveExpiredClients() int {
-	clientsMu.Lock()
-	defer clientsMu.Unlock()
+func (m *ClientManager) RemoveExpiredClients() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	expired := time.Now().Add(-sessionExpireDuration)
 	removed := 0
-	for id, session := range Clients {
+	for id, session := range m.clients {
 		if session.CreatedAt.Before(expired) {
-			if session.cancelFunc != nil {
-				session.cancelFunc()
-			}
-			delete(Clients, id)
+			session.Close()
+			delete(m.clients, id)
 			removed++
 		}
 	}
 	return removed
 }
 
-func SnapshotClients() []*ClientSession {
-	clientsMu.RLock()
-	defer clientsMu.RUnlock()
-	list := make([]*ClientSession, 0, len(Clients))
-	for _, c := range Clients {
+func (m *ClientManager) SnapshotClients() []*ClientSession {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	list := make([]*ClientSession, 0, len(m.clients))
+	for _, c := range m.clients {
 		list = append(list, c)
 	}
 	return list
 }
 
-func BroadCastMessage(name string, content string) {
+func (m *ClientManager) BroadCastMessage(name string, content string) {
 	msg := &Message{
 		Name:    name,
 		Content: content,
 	}
-	for _, client := range SnapshotClients() {
+	for _, client := range m.SnapshotClients() {
 		client.TrySend(msg)
+	}
+}
+
+func (m *ClientManager) WaitQueue(ctx context.Context, cb func()) {
+	m.queueMgr.WaitQueue(ctx, cb)
+}
+
+func (m *ClientManager) GetQueuePositionByCtx(ctx context.Context) (int, int) {
+	return m.queueMgr.GetQueuePositionByCtx(ctx)
+}
+
+func (m *ClientManager) StartQueueHandler() {
+	m.queueMgr.HandleQueue()
+}
+
+func (m *ClientManager) ShutdownQueue() {
+	m.queueMgr.Shutdown()
+}
+
+var (
+	clientMgrGlobal   *ClientManager
+	clientMgrGlobalMu sync.RWMutex
+)
+
+func SetGlobalClientManager(m *ClientManager) {
+	clientMgrGlobalMu.Lock()
+	defer clientMgrGlobalMu.Unlock()
+	clientMgrGlobal = m
+}
+
+func BroadCastMessage(name string, content string) {
+	clientMgrGlobalMu.RLock()
+	defer clientMgrGlobalMu.RUnlock()
+	if clientMgrGlobal != nil {
+		clientMgrGlobal.BroadCastMessage(name, content)
 	}
 }

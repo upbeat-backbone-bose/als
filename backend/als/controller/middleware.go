@@ -5,10 +5,10 @@ import (
 	"github.com/samlm0/als/v2/als/client"
 )
 
-func MiddlewareSessionOnHeader() gin.HandlerFunc {
+func MiddlewareSessionOnHeader(clientMgr *client.ClientManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionId := c.GetHeader("session")
-		clientSession, ok := client.GetClient(sessionId)
+		clientSession, ok := clientMgr.GetClient(sessionId)
 		if !ok {
 			c.JSON(400, &gin.H{
 				"success": false,
@@ -22,10 +22,10 @@ func MiddlewareSessionOnHeader() gin.HandlerFunc {
 	}
 }
 
-func MiddlewareSessionOnUrl() gin.HandlerFunc {
+func MiddlewareSessionOnUrl(clientMgr *client.ClientManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionId := c.Param("session")
-		clientSession, ok := client.GetClient(sessionId)
+		clientSession, ok := clientMgr.GetClient(sessionId)
 		if !ok {
 			c.JSON(400, &gin.H{
 				"success": false,
