@@ -2,7 +2,6 @@ package fakeshell
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"regexp"
 
@@ -13,7 +12,6 @@ import (
 )
 
 func defineMenuCommands() console.Commands {
-	showedIsFirstTime := false
 	return func() *cobra.Command {
 		rootCmd := &cobra.Command{}
 
@@ -41,8 +39,6 @@ func defineMenuCommands() console.Commands {
 			},
 		}
 
-		hasNotFound := false
-
 		argsPassthough := func(args []string) ([]string, error) {
 			return args, nil
 		}
@@ -51,8 +47,6 @@ func defineMenuCommands() console.Commands {
 			if feature {
 				_, err := exec.LookPath(command)
 				if err != nil {
-					log.Printf("Warning: %s command not found, feature disabled", command)
-					hasNotFound = true
 					continue
 				}
 				filter, ok := argsFilter[command]
@@ -61,10 +55,6 @@ func defineMenuCommands() console.Commands {
 				}
 				commands.AddExecutableAsCommand(rootCmd, command, filter)
 			}
-		}
-
-		if hasNotFound {
-			showedIsFirstTime = true
 		}
 
 		rootCmd.SetHelpCommand(&cobra.Command{

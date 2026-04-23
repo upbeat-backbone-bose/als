@@ -39,6 +39,8 @@ func (app *Application) Init() error {
 	app.httpServer.SetListen(app.config.ListenHost + ":" + app.config.ListenPort)
 
 	SetupHttpRoute(app.httpServer.GetEngine(), app.clientMgr)
+	
+	client.SetGlobalClientManager(app.clientMgr)
 
 	if app.config.FeatureIfaceTraffic {
 		app.wg.Add(1)

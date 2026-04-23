@@ -140,3 +140,19 @@ func (m *ClientManager) StartQueueHandler() {
 func (m *ClientManager) ShutdownQueue() {
 	m.queueMgr.Shutdown()
 }
+
+// clientMgrGlobal 全局变量用于向后兼容
+// 新的代码应该通过 ClientManager 方法访问
+var clientMgrGlobal *ClientManager
+
+// SetGlobalClientManager sets the global client manager for legacy compatibility
+func SetGlobalClientManager(m *ClientManager) {
+	clientMgrGlobal = m
+}
+
+// BroadCastMessage sends a message to all connected clients
+func BroadCastMessage(name string, content string) {
+	if clientMgrGlobal != nil {
+		clientMgrGlobal.BroadCastMessage(name, content)
+	}
+}

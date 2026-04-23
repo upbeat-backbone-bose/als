@@ -1,8 +1,8 @@
 package fakeshell
 
 import (
-	"fmt"
 	"io"
+	"log"
 	"os"
 
 	"github.com/reeflective/console"
