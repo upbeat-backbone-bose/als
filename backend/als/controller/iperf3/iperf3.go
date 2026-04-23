@@ -29,8 +29,18 @@ func randomPort(min, max int) (int, error) {
 
 func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		v, _ := c.Get("clientSession")
-		clientSession := v.(*client.ClientSession)
+		v, ok := c.Get("clientSession")
+		if !ok {
+			c.JSON(400, &gin.H{"error": "Invalid session"})
+			c.Abort()
+			return
+		}
+		clientSession, ok := v.(*client.ClientSession)
+		if !ok {
+			c.JSON(400, &gin.H{"error": "Invalid session type"})
+			c.Abort()
+			return
+		}
 
 		timeout := time.Second * 60
 		port, err := randomPort(config.Config.Iperf3StartPort, config.Config.Iperf3EndPort)

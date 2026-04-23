@@ -3,6 +3,8 @@ package als
 import (
 	"io/fs"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samlm0/als/v2/als/client"
@@ -79,13 +81,32 @@ func SetupHttpRoute(e *gin.Engine, clientMgr *client.ClientManager) {
 }
 
 func handleStatisFile(filePath string, c *gin.Context) {
-	// Prevent path traversal attacks
 	if strings.Contains(filePath, "..") {
 		c.String(403, "Forbidden")
 		c.Abort()
 		return
 	}
-	
-	// Clean the path to prevent directory traversal
+
 	filePath = filepath.Clean(filePath)
 	if !filepath.IsAbs(filePath) && strings.HasPrefix(filePath, "..") {
+		c.String(403, "Forbidden")
+		c.Abort()
+		return
+	}
+
+	uiFs := iEmbed.UIStaticFiles
+	subFs, err := fs.Sub(uiFs, "ui")
+	if err != nil {
+		c.String(500, "Internal server error")
+		c.Abort()
+		return
+	}
+	httpFs := http.FileServer(http.FS(subFs))
+	_, err = fs.ReadFile(subFs, filePath)
+	if err != nil {
+		c.String(404, "Not found")
+		c.Abort()
+		return
+	}
+	httpFs.ServeHTTP(c.Writer, c.Request)
+}
