@@ -51,7 +51,12 @@ func LoadFromEnv(cfg *ALSConfig) {
 
 	for envVar, configField := range envVarsBool {
 		if v := os.Getenv(envVar); len(v) != 0 {
-			*configField = v == "true"
+			if v == "true" {
+				*configField = true
+			} else if v == "false" {
+				*configField = false
+			}
+			// 其他值保持原样
 		}
 	}
 

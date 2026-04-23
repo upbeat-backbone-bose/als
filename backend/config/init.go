@@ -1,14 +1,4 @@
 package config
 
-var (
-	Config *ALSConfig
-	IsInternalCall bool
-)
-
-func updatePublicIP() {
-	// 原有实现保持不变
-}
-
-func updateLocation() {
-	// 原有实现保持不变
-}
+// IsInternalCall 用于标识是否为内部调用（fake shell 模式）
+var IsInternalCall bool

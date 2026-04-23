@@ -13,21 +13,20 @@ import (
 	"github.com/miekg/dns"
 )
 
-func updatePublicIP() {
+func updatePublicIP(cfg *ALSConfig) {
 	log.Default().Println("Updating IP address from internet...")
 	// get ipv4
 	go func() {
 		addr, err := getPublicIPv4ViaDNS()
 		if err == nil {
-			Config.PublicIPv4 = addr
+			cfg.PublicIPv4 = addr
 			log.Printf("Public IPv4 address: %s\n", addr)
-			// fmt.Println(Config)
 			return
 		}
 
 		addr, err = getPublicIPv4ViaHttp()
 		if err == nil {
-			Config.PublicIPv4 = addr
+			cfg.PublicIPv4 = addr
 			log.Printf("Public IPv4 address: %s\n", addr)
 			return
 		}
@@ -37,7 +36,7 @@ func updatePublicIP() {
 	go func() {
 		addr, err := getPublicIPv6ViaDNS()
 		if err == nil {
-			Config.PublicIPv6 = addr
+			cfg.PublicIPv6 = addr
 			log.Printf("Public IPv6 address: %s\n", addr)
 			return
 		}

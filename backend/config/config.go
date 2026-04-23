@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// Config 全局变量用于向后兼容
+// 新的代码应该通过依赖注入传递 *ALSConfig
+var Config *ALSConfig
+
+
 type ALSConfig struct {
 	ListenHost string `json:"-"`
 	ListenPort string `json:"-"`
@@ -79,9 +84,9 @@ func (c *ALSConfig) LoadWebConfig() error {
 
 	if c.PublicIPv4 == "" && c.PublicIPv6 == "" {
 		go func() {
-			updatePublicIP()
+			updatePublicIP(c)
 			if c.Location == "" {
-				updateLocation()
+				updateLocation(c)
 			}
 		}()
 	}
