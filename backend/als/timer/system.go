@@ -1,6 +1,7 @@
 package timer
 
 import (
+	"context"
 	"runtime"
 	"strconv"
 	"time"
@@ -8,13 +9,17 @@ import (
 	"github.com/samlm0/als/v2/als/client"
 )
 
-func UpdateSystemResource() {
+func UpdateSystemResource(ctx context.Context) {
 	var m runtime.MemStats
 	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 	for {
-		<-ticker.C
-		runtime.ReadMemStats(&m)
-		client.BroadCastMessage("MemoryUsage", strconv.FormatUint(m.Sys, 10))
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runtime.ReadMemStats(&m)
+			client.BroadCastMessage("MemoryUsage", strconv.FormatUint(m.Sys, 10))
+		}
 	}
-
 }

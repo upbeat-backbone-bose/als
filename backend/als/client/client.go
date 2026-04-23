@@ -53,13 +53,15 @@ func (c *ClientSession) TrySend(msg *Message) bool {
 }
 
 type ClientManager struct {
-	mu      sync.RWMutex
-	clients map[string]*ClientSession
+	mu       sync.RWMutex
+	clients  map[string]*ClientSession
+	queueMgr *QueueManager
 }
 
 func NewClientManager() *ClientManager {
 	return &ClientManager{
-		clients: make(map[string]*ClientSession),
+		clients:  make(map[string]*ClientSession),
+		queueMgr: NewQueueManager(),
 	}
 }
 
@@ -121,4 +123,20 @@ func (m *ClientManager) BroadCastMessage(name string, content string) {
 	for _, client := range m.SnapshotClients() {
 		client.TrySend(msg)
 	}
+}
+
+func (m *ClientManager) WaitQueue(ctx context.Context, cb func()) {
+	m.queueMgr.WaitQueue(ctx, cb)
+}
+
+func (m *ClientManager) GetQueuePositionByCtx(ctx context.Context) (int, int) {
+	return m.queueMgr.GetQueuePositionByCtx(ctx)
+}
+
+func (m *ClientManager) StartQueueHandler() {
+	m.queueMgr.HandleQueue()
+}
+
+func (m *ClientManager) ShutdownQueue() {
+	m.queueMgr.Shutdown()
 }

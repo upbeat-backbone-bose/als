@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/creack/pty"
@@ -71,15 +73,19 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 	if err != nil {
 		return
 	}
-	cmd := exec.CommandContext(ctx, ex, "--shell") // #nosec G204 command is fixed to current binary
+	cmd := exec.CommandContext(ctx, ex, "--shell")
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return
 	}
 	defer ptmx.Close()
 
+	var wg sync.WaitGroup
+
 	// context aware
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		<-ctx.Done()
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
@@ -87,8 +93,9 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 	}()
 
 	// cmd -> websocket
+	wg.Add(1)
 	go func() {
-		defer cancel()
+		defer wg.Done()
 		buf := make([]byte, 4096)
 		for {
 			n, err := ptmx.Read(buf)
@@ -102,8 +109,9 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 	}()
 
 	// websocket -> cmd
+	wg.Add(1)
 	go func() {
-		defer cancel()
+		defer wg.Done()
 		for {
 			_, buf, err := conn.ReadMessage()
 			if err != nil {
@@ -142,7 +150,10 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 			}
 		}
 	}()
+
 	if err := cmd.Wait(); err != nil && !errors.Is(err, syscall.ECHILD) {
 		fmt.Println("shell command exited with error:", err)
 	}
+	
+	wg.Wait()
 }

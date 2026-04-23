@@ -22,7 +22,7 @@ func SetupHttpRoute(e *gin.Engine, clientMgr *client.ClientManager) {
 	v1 := e.Group("/method", controller.MiddlewareSessionOnHeader(clientMgr))
 	{
 		if config.Config.FeatureIperf3 {
-			v1.GET("/iperf3/server", iperf3.Handle)
+			v1.GET("/iperf3/server", iperf3.Handle(clientMgr))
 		}
 
 		if config.Config.FeaturePing {
@@ -30,7 +30,7 @@ func SetupHttpRoute(e *gin.Engine, clientMgr *client.ClientManager) {
 		}
 
 		if config.Config.FeatureSpeedtestDotNet {
-			v1.GET("/speedtest_dot_net", speedtest.HandleSpeedtestDotNet)
+			v1.GET("/speedtest_dot_net", speedtest.HandleSpeedtestDotNet(clientMgr))
 		}
 
 		if config.Config.FeatureIfaceTraffic {
@@ -48,7 +48,7 @@ func SetupHttpRoute(e *gin.Engine, clientMgr *client.ClientManager) {
 	speedtestRoute := sessionRoute.Group("/speedtest", controller.MiddlewareSessionOnUrl(clientMgr))
 	{
 		if config.Config.FeatureFileSpeedtest {
-			speedtestRoute.GET("/file/:filename", speedtest.HandleFakeFile)
+			speedtestRoute.GET("/file/:filename", speedtest.HandleFakeFile(clientMgr))
 		}
 
 		if config.Config.FeatureLibrespeed {
@@ -79,14 +79,13 @@ func SetupHttpRoute(e *gin.Engine, clientMgr *client.ClientManager) {
 }
 
 func handleStatisFile(filePath string, c *gin.Context) {
-	uiFs := iEmbed.UIStaticFiles
-	subFs, _ := fs.Sub(uiFs, "ui")
-	httpFs := http.FileServer(http.FS(subFs))
-	_, err := fs.ReadFile(subFs, filePath)
-	if err != nil {
-		c.String(404, "Not found")
+	// Prevent path traversal attacks
+	if strings.Contains(filePath, "..") {
+		c.String(403, "Forbidden")
 		c.Abort()
 		return
 	}
-	httpFs.ServeHTTP(c.Writer, c.Request)
-}
+	
+	// Clean the path to prevent directory traversal
+	filePath = filepath.Clean(filePath)
+	if !filepath.IsAbs(filePath) && strings.HasPrefix(filePath, "..") {

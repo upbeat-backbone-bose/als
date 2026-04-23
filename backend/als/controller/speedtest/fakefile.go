@@ -49,54 +49,51 @@ func sizeToBytes(size string) (int64, error) {
 	return num, nil
 }
 
-func HandleFakeFile(c *gin.Context) {
-	filename := c.Param("filename")
-	var re = regexp.MustCompile(`^(\d+)(KB|MB|GB|TB)\.test$`)
+func HandleFakeFile(clientMgr *client.ClientManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		filename := c.Param("filename")
+		var re = regexp.MustCompile(`^(\d+)(KB|MB|GB|TB)\.test$`)
 
-	pos := re.FindStringIndex(filename)
-	if pos == nil {
-		c.String(404, "404 file not found")
-		return
-	}
-
-	client.WaitQueue(c.Request.Context(), nil)
-
-	filename = filename[0 : len(filename)-5]
-	if !contains(config.Config.SpeedtestFileList, filename) {
-		c.String(404, "404 file not found")
-		return
-	}
-
-	size, err := sizeToBytes(filename)
-	if err != nil {
-		c.String(404, "Invalid file size")
-		return
-	}
-	c.Header("Content-Type", "application/octet-stream")
-	c.Header("Content-Length", strconv.FormatInt(size, 10))
-	c.Stream(func(w io.Writer) bool {
-		buf := make([]byte, 1024*1024)
-		if _, err := rand.Read(buf); err != nil {
-			return false
+		pos := re.FindStringIndex(filename)
+		if pos == nil {
+			c.String(404, "404 file not found")
+			return
 		}
 
-		for size > 0 {
-			// 如果剩余的大小小于缓冲区的大小，只写入剩余的大小
-			if size < int64(len(buf)) {
-				buf = buf[:size]
-			}
+		clientMgr.WaitQueue(c.Request.Context(), nil)
 
-			// 将缓冲区写入响应
-			if _, err := w.Write(buf); err != nil {
+		filename = filename[0 : len(filename)-5]
+		if !contains(config.Config.SpeedtestFileList, filename) {
+			c.String(404, "404 file not found")
+			return
+		}
+
+		size, err := sizeToBytes(filename)
+		if err != nil {
+			c.String(404, "Invalid file size")
+			return
+		}
+		c.Header("Content-Type", "application/octet-stream")
+		c.Header("Content-Length", strconv.FormatInt(size, 10))
+		c.Stream(func(w io.Writer) bool {
+			buf := make([]byte, 1024*1024)
+			if _, err := rand.Read(buf); err != nil {
 				return false
 			}
 
-			// 更新剩余的大小
-			size -= int64(len(buf))
-		}
+			for size > 0 {
+				if size < int64(len(buf)) {
+					buf = buf[:size]
+				}
 
-		// 返回false表示我们已经完成了写入
-		return false
-	})
-	// c.Data()
+				if _, err := w.Write(buf); err != nil {
+					return false
+				}
+
+				size -= int64(len(buf))
+			}
+
+			return false
+		})
+	}
 }

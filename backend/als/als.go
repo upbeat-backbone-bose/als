@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -15,12 +16,12 @@ import (
 )
 
 type Application struct {
-	config      *config.ALSConfig
-	clientMgr   *client.ClientManager
-	queueMgr    *client.QueueManager
-	httpServer  *alsHttp.Server
-	ctx         context.Context
-	cancel      context.CancelFunc
+	config     *config.ALSConfig
+	clientMgr  *client.ClientManager
+	httpServer *alsHttp.Server
+	ctx        context.Context
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
 }
 
 func NewApplication(cfg *config.ALSConfig) *Application {
@@ -28,7 +29,6 @@ func NewApplication(cfg *config.ALSConfig) *Application {
 	return &Application{
 		config:     cfg,
 		clientMgr:  client.NewClientManager(),
-		queueMgr:   client.NewQueueManager(),
 		httpServer: alsHttp.CreateServer(),
 		ctx:        ctx,
 		cancel:     cancel,
@@ -41,26 +41,32 @@ func (app *Application) Init() error {
 	SetupHttpRoute(app.httpServer.GetEngine(), app.clientMgr)
 
 	if app.config.FeatureIfaceTraffic {
-		go timer.SetupInterfaceBroadcast()
+		app.wg.Add(1)
+		go func() {
+			defer app.wg.Done()
+			timer.SetupInterfaceBroadcast(app.ctx)
+		}()
 	}
-	go timer.UpdateSystemResource()
-	go app.queueMgr.HandleQueue()
-	go app.handleQueueWrapper()
-	go app.cleanupExpiredClients()
+
+	app.wg.Add(1)
+	go func() {
+		defer app.wg.Done()
+		timer.UpdateSystemResource(app.ctx)
+	}()
+
+	app.wg.Add(1)
+	go func() {
+		defer app.wg.Done()
+		app.clientMgr.StartQueueHandler()
+	}()
+
+	app.wg.Add(1)
+	go func() {
+		defer app.wg.Done()
+		app.cleanupExpiredClients()
+	}()
 
 	return app.httpServer.Start()
-}
-
-func (app *Application) handleQueueWrapper() {
-	// Wrapper to inject clientMgr context
-	for {
-		select {
-		case <-app.ctx.Done():
-			return
-		default:
-			// ClientManager handles its own context
-		}
-	}
 }
 
 func (app *Application) cleanupExpiredClients() {
@@ -84,6 +90,8 @@ func (app *Application) Shutdown() {
 	log.Println("Application shutting down...")
 	app.cancel()
 	app.queueMgr.Shutdown()
+	app.wg.Wait()
+	log.Println("Application shutdown complete")
 }
 
 func Init() {
@@ -91,7 +99,7 @@ func Init() {
 	if err := cfg.LoadWebConfig(); err != nil {
 		log.Printf("Warning: Failed to load web config: %v", err)
 	}
-	
+
 	config.Config = cfg
 
 	log.Default().Println("Listen on: " + cfg.ListenHost + ":" + cfg.ListenPort)

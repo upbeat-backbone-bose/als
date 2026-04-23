@@ -13,7 +13,7 @@ import (
 	"github.com/miekg/dns"
 )
 
-func updatePublicIP(cfg *ALSConfig) {
+func updatePublicIP(ctx context.Context, cfg *ALSConfig) {
 	log.Default().Println("Updating IP address from internet...")
 	// get ipv4
 	go func() {
@@ -41,6 +41,8 @@ func updatePublicIP(cfg *ALSConfig) {
 			return
 		}
 	}()
+	
+	<-ctx.Done()
 }
 
 func getPublicIPv4ViaDNS() (string, error) {

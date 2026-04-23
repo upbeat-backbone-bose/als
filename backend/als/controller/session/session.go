@@ -58,7 +58,7 @@ func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 			select {
 			case <-ctx.Done():
 				return
-			case msg, ok := <-channel:
+			case msg, ok := <-clientSession.Channel:
 				if !ok {
 					return
 				}

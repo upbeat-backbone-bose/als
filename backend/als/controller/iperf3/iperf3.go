@@ -27,69 +27,74 @@ func randomPort(min, max int) (int, error) {
 	return int(n.Int64()) + min, nil
 }
 
-func Handle(c *gin.Context) {
-	v, _ := c.Get("clientSession")
-	clientSession := v.(*client.ClientSession)
+func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		v, _ := c.Get("clientSession")
+		clientSession := v.(*client.ClientSession)
 
-	timeout := time.Second * 60
-	port, err := randomPort(config.Config.Iperf3StartPort, config.Config.Iperf3EndPort)
-	if err != nil {
-		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(clientSession.GetContext(c.Request.Context()), timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "iperf3", "-s", "--forceflush", "-p", fmt.Sprintf("%d", port)) // #nosec G204 args are internally generated
-	clientSession.Channel <- &client.Message{
-		Name:    "Iperf3",
-		Content: strconv.Itoa(port),
-	}
-
-	writer := func(pipe io.ReadCloser) {
-		for {
-			buf := make([]byte, 1024)
-			n, err := pipe.Read(buf)
-			if err != nil {
-				return
-			}
-			msg := &client.Message{
-				Name:    "Iperf3Stream",
-				Content: string(buf[:n]),
-			}
-			clientSession.Channel <- msg
+		timeout := time.Second * 60
+		port, err := randomPort(config.Config.Iperf3StartPort, config.Config.Iperf3EndPort)
+		if err != nil {
+			c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+			return
 		}
-	}
 
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
-		return
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
-		return
-	}
+		ctx, cancel := context.WithTimeout(clientSession.Context(), timeout)
+		defer cancel()
 
-	err = cmd.Start()
-	if err != nil {
-		c.JSON(400, &gin.H{
-			"success": false,
+		clientMgr.WaitQueue(ctx, nil)
+
+		cmd := exec.CommandContext(ctx, "iperf3", "-s", "--forceflush", "-p", fmt.Sprintf("%d", port))
+		clientSession.Channel <- &client.Message{
+			Name:    "Iperf3",
+			Content: strconv.Itoa(port),
+		}
+
+		writer := func(pipe io.ReadCloser) {
+			for {
+				buf := make([]byte, 1024)
+				n, err := pipe.Read(buf)
+				if err != nil {
+					return
+				}
+				msg := &client.Message{
+					Name:    "Iperf3Stream",
+					Content: string(buf[:n]),
+				}
+				clientSession.Channel <- msg
+			}
+		}
+
+		stdoutPipe, err := cmd.StdoutPipe()
+		if err != nil {
+			c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+			return
+		}
+		stderrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		err = cmd.Start()
+		if err != nil {
+			c.JSON(500, &gin.H{
+				"success": false,
+				"error":   err.Error(),
+			})
+			return
+		}
+
+		go writer(stdoutPipe)
+		go writer(stderrPipe)
+
+		if err := cmd.Wait(); err != nil {
+			c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		c.JSON(200, &gin.H{
+			"success": true,
 		})
-		return
 	}
-
-	go writer(stdoutPipe)
-	go writer(stderrPipe)
-
-	if err := cmd.Wait(); err != nil {
-		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
-		return
-	}
-
-	c.JSON(200, &gin.H{
-		"success": true,
-	})
 }

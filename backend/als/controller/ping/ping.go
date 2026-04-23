@@ -12,12 +12,20 @@ import (
 func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip, queryOk := c.GetQuery("ip")
-		v := c.Get("clientSession")
-		clientSession, sessionOk := v.(*client.ClientSession)
+		v, sessionOk := c.Get("clientSession")
 		if !sessionOk {
 			c.JSON(400, &gin.H{
 				"success": false,
 				"error":   "Invalid session",
+			})
+			c.Abort()
+			return
+		}
+		clientSession, ok := v.(*client.ClientSession)
+		if !ok {
+			c.JSON(400, &gin.H{
+				"success": false,
+				"error":   "Invalid session type",
 			})
 			c.Abort()
 			return
@@ -63,7 +71,7 @@ func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 				log.Println("Channel full, dropping ping event")
 			}
 		}
-		p.Start(c.Request.Context())
+		go p.Start(c.Request.Context())
 
 		c.JSON(200, &gin.H{
 			"success": true,

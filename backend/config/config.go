@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"io"
 	"log"
 	"net/http"
@@ -83,8 +84,10 @@ func (c *ALSConfig) LoadWebConfig() error {
 	}
 
 	if c.PublicIPv4 == "" && c.PublicIPv6 == "" {
+		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
-			updatePublicIP(c)
+			defer cancel()
+			updatePublicIP(ctx, c)
 			if c.Location == "" {
 				updateLocation(c)
 			}
