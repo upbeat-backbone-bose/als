@@ -90,46 +90,37 @@ func (m *QueueManager) HandleQueue() {
 		case <-m.wakeup:
 		}
 
-		for {
-			m.mu.Lock()
-			if len(m.entries) == 0 {
-				m.mu.Unlock()
-				break
-			}
-			head := m.entries[0]
+		m.mu.Lock()
+		if len(m.entries) == 0 {
 			m.mu.Unlock()
-
-			select {
-			case <-head.ctx.Done():
-				m.mu.Lock()
-				if len(m.entries) > 0 && m.entries[0] == head {
-					m.entries = m.entries[1:]
-				}
-				m.mu.Unlock()
-				continue
-			default:
-			}
-
-			if head.notify != nil {
-				head.notify()
-			}
-
-			head.cancel()
-
-			<-head.ctx.Done()
-
-			m.mu.Lock()
-			if len(m.entries) > 0 && m.entries[0] == head {
-				m.entries = m.entries[1:]
-			}
-
-			for _, e := range m.entries {
-				if e.notify != nil {
-					e.notify()
-				}
-			}
-			m.mu.Unlock()
+			continue
 		}
+
+		head := m.entries[0]
+		headCtx := head.ctx
+
+		select {
+		case <-headCtx.Done():
+			m.entries = m.entries[1:]
+			m.mu.Unlock()
+			continue
+		default:
+		}
+
+		if head.notify != nil {
+			head.notify()
+		}
+
+		head.cancel()
+		<-headCtx.Done()
+
+		m.entries = m.entries[1:]
+		for _, e := range m.entries {
+			if e.notify != nil {
+				e.notify()
+			}
+		}
+		m.mu.Unlock()
 	}
 }
 

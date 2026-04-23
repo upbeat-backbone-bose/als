@@ -36,8 +36,11 @@ func (e *Server) SetListen(listen string) {
 
 func (e *Server) Start() error {
 	srv := &http.Server{
-		Addr:    e.listen,
-		Handler: e.engine,
+		Addr:         e.listen,
+		Handler:      e.engine,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {
@@ -50,7 +53,7 @@ func (e *Server) Start() error {
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Fatalf("Server forced to shutdown: %v", err)
+			log.Printf("Server shutdown error: %v", err)
 		}
 
 		log.Println("Server exited")

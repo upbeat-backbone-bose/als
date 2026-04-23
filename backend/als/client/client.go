@@ -141,17 +141,20 @@ func (m *ClientManager) ShutdownQueue() {
 	m.queueMgr.Shutdown()
 }
 
-// clientMgrGlobal 全局变量用于向后兼容
-// 新的代码应该通过 ClientManager 方法访问
-var clientMgrGlobal *ClientManager
+var (
+	clientMgrGlobal   *ClientManager
+	clientMgrGlobalMu sync.RWMutex
+)
 
-// SetGlobalClientManager sets the global client manager for legacy compatibility
 func SetGlobalClientManager(m *ClientManager) {
+	clientMgrGlobalMu.Lock()
+	defer clientMgrGlobalMu.Unlock()
 	clientMgrGlobal = m
 }
 
-// BroadCastMessage sends a message to all connected clients
 func BroadCastMessage(name string, content string) {
+	clientMgrGlobalMu.RLock()
+	defer clientMgrGlobalMu.RUnlock()
 	if clientMgrGlobal != nil {
 		clientMgrGlobal.BroadCastMessage(name, content)
 	}

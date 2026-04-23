@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 )
 
@@ -85,9 +86,10 @@ func (c *ALSConfig) LoadWebConfig() error {
 
 	if c.PublicIPv4 == "" && c.PublicIPv6 == "" {
 		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
 		go func() {
 			defer cancel()
-			updatePublicIP(ctx, c)
+			updatePublicIP(ctx, c, &wg)
 			if c.Location == "" {
 				updateLocation(c)
 			}

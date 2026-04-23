@@ -91,7 +91,7 @@ func (app *Application) cleanupExpiredClients() {
 func (app *Application) Shutdown() {
 	log.Println("Application shutting down...")
 	app.cancel()
-	app.queueMgr.Shutdown()
+	app.clientMgr.ShutdownQueue()
 	app.wg.Wait()
 	log.Println("Application shutdown complete")
 }

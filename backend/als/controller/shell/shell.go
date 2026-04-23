@@ -88,7 +88,9 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 		defer wg.Done()
 		<-ctx.Done()
 		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
+			if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+				log.Printf("Failed to kill shell process: %v", err)
+			}
 		}
 	}()
 

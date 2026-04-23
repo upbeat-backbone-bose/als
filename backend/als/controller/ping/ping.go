@@ -30,7 +30,7 @@ func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		
+
 		if !queryOk {
 			c.JSON(400, &gin.H{
 				"success": false,
@@ -71,6 +71,7 @@ func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 				log.Println("Channel full, dropping ping event")
 			}
 		}
+
 		go p.Start(c.Request.Context())
 
 		c.JSON(200, &gin.H{

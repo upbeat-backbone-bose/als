@@ -9,24 +9,46 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	maxChunks       = 1024
+	maxChunkSize    = 1048576
+	maxTotalSize    = 104857600
+)
+
 func HandleDownload(c *gin.Context) {
-	c.Writer.WriteHeader(http.StatusOK)
 	chunks := 4
 	if ckSize, ok := c.GetQuery("ckSize"); ok {
 		if ckSizeInt, err := strconv.Atoi(ckSize); err == nil && ckSizeInt > 0 {
 			chunks = ckSizeInt
-			if chunks > 1024 {
-				chunks = 1024
+			if chunks > maxChunks {
+				chunks = maxChunks
 			}
 		}
 	}
 
-	data := make([]byte, 1048576)
+	chunkSize := maxChunkSize
+	if cs, ok := c.GetQuery("cs"); ok {
+		if csInt, err := strconv.Atoi(cs); err == nil && csInt > 0 {
+			chunkSize = csInt
+			if chunkSize > maxChunkSize {
+				chunkSize = maxChunkSize
+			}
+		}
+	}
+
+	totalSize := chunks * chunkSize
+	if totalSize > maxTotalSize {
+		totalSize = maxTotalSize
+		chunks = maxTotalSize / chunkSize
+	}
+
+	data := make([]byte, chunkSize)
 	if _, err := rand.Read(data); err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
 
+	c.Writer.WriteHeader(http.StatusOK)
 	for i := 0; i < chunks; i++ {
 		if _, err := c.Writer.Write(data); err != nil {
 			return

@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"os/exec"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -60,9 +62,12 @@ func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 			Content: strconv.Itoa(port),
 		}
 
+		var writerWg sync.WaitGroup
+
 		writer := func(pipe io.ReadCloser) {
+			defer writerWg.Done()
+			buf := make([]byte, 1024)
 			for {
-				buf := make([]byte, 1024)
 				n, err := pipe.Read(buf)
 				if err != nil {
 					return
@@ -71,7 +76,10 @@ func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 					Name:    "Iperf3Stream",
 					Content: string(buf[:n]),
 				}
-				clientSession.Channel <- msg
+				select {
+				case clientSession.Channel <- msg:
+				default:
+				}
 			}
 		}
 
@@ -95,13 +103,26 @@ func Handle(clientMgr *client.ClientManager) gin.HandlerFunc {
 			return
 		}
 
+		writerWg.Add(2)
 		go writer(stdoutPipe)
 		go writer(stderrPipe)
 
+		go func() {
+			<-ctx.Done()
+			if cmd.Process != nil {
+				if err := cmd.Process.Kill(); err != nil {
+					log.Printf("Failed to kill iperf3 process: %v", err)
+				}
+			}
+		}()
+
 		if err := cmd.Wait(); err != nil {
 			c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+			writerWg.Wait()
 			return
 		}
+
+		writerWg.Wait()
 
 		c.JSON(200, &gin.H{
 			"success": true,

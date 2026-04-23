@@ -8,15 +8,18 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
 )
 
-func updatePublicIP(ctx context.Context, cfg *ALSConfig) {
+func updatePublicIP(ctx context.Context, cfg *ALSConfig, wg *sync.WaitGroup) {
 	log.Default().Println("Updating IP address from internet...")
-	// get ipv4
+
+	wg.Add(2)
 	go func() {
+		defer wg.Done()
 		addr, err := getPublicIPv4ViaDNS()
 		if err == nil {
 			cfg.PublicIPv4 = addr
@@ -32,8 +35,8 @@ func updatePublicIP(ctx context.Context, cfg *ALSConfig) {
 		}
 	}()
 
-	// get ipv6
 	go func() {
+		defer wg.Done()
 		addr, err := getPublicIPv6ViaDNS()
 		if err == nil {
 			cfg.PublicIPv6 = addr
@@ -41,8 +44,8 @@ func updatePublicIP(ctx context.Context, cfg *ALSConfig) {
 			return
 		}
 	}()
-	
-	<-ctx.Done()
+
+	wg.Wait()
 }
 
 func getPublicIPv4ViaDNS() (string, error) {

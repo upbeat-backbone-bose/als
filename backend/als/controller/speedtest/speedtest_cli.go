@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,7 @@ func HandleSpeedtestDotNet(clientMgr *client.ClientManager) gin.HandlerFunc {
 			nodeId = ""
 		}
 		var closed atomic.Bool
+		var writerWg sync.WaitGroup
 		timeout := time.Second * 60
 
 		ctx, cancel := context.WithTimeout(clientSession.Context(), timeout)
@@ -39,13 +41,13 @@ func HandleSpeedtestDotNet(clientMgr *client.ClientManager) gin.HandlerFunc {
 		defer func() {
 			closed.Store(true)
 		}()
-		go func() {
-			<-ctx.Done()
-			closed.Store(true)
-		}()
+
 		clientMgr.WaitQueue(ctx, func() {
 			pos, totalPos := clientMgr.GetQueuePositionByCtx(ctx)
-			msg, _ := json.Marshal(gin.H{"type": "queue", "pos": pos, "totalPos": totalPos})
+			msg, err := json.Marshal(gin.H{"type": "queue", "pos": pos, "totalPos": totalPos})
+			if err != nil {
+				return
+			}
 			if !closed.Load() {
 				clientSession.Channel <- &client.Message{
 					Name:    "SpeedtestStream",
@@ -62,11 +64,14 @@ func HandleSpeedtestDotNet(clientMgr *client.ClientManager) gin.HandlerFunc {
 		go func() {
 			<-ctx.Done()
 			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
+				if err := cmd.Process.Kill(); err != nil {
+					log.Printf("Failed to kill speedtest process: %v", err)
+				}
 			}
 		}()
 
 		writer := func(pipe io.ReadCloser) {
+			defer writerWg.Done()
 			for {
 				buf := make([]byte, 1024)
 				n, err := pipe.Read(buf)
@@ -98,6 +103,7 @@ func HandleSpeedtestDotNet(clientMgr *client.ClientManager) gin.HandlerFunc {
 			return
 		}
 
+		writerWg.Add(2)
 		go writer(stdoutPipe)
 		go writer(stderrPipe)
 
@@ -106,6 +112,7 @@ func HandleSpeedtestDotNet(clientMgr *client.ClientManager) gin.HandlerFunc {
 			c.JSON(500, &gin.H{"success": false, "error": err.Error()})
 			return
 		}
+		writerWg.Wait()
 		log.Println("Speedtest completed successfully")
 		c.JSON(200, &gin.H{
 			"success": true,
