@@ -23,7 +23,7 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 	var closed atomic.Bool
 	timeout := time.Second * 60
 
-	ctx, cancel := context.WithTimeout(clientSession.GetContext(c.Request.Context()), timeout)
+	ctx, cancel := context.WithTimeout(clientSession.Context(), timeout)
 	defer cancel()
 	defer func() {
 		closed.Store(true)
@@ -91,10 +91,11 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 	go writer(stderrPipe)
 
 	if err := cmd.Wait(); err != nil {
+		log.Printf("Speedtest command failed: %v", err)
 		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
 		return
 	}
-	fmt.Println("speedtest-cli quit")
+	log.Println("Speedtest completed successfully")
 	c.JSON(200, &gin.H{
 		"success": true,
 	})

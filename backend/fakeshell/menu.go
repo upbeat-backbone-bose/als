@@ -51,9 +51,7 @@ func defineMenuCommands() console.Commands {
 			if feature {
 				_, err := exec.LookPath(command)
 				if err != nil {
-					if !showedIsFirstTime {
-						fmt.Println("Error: " + command + " is not installed")
-					}
+					log.Printf("Warning: %s command not found, feature disabled", command)
 					hasNotFound = true
 					continue
 				}

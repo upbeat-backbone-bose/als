@@ -18,9 +18,11 @@ import (
 	"github.com/samlm0/als/v2/als/client"
 )
 
+// upgrader handles WebSocket connection upgrades with security checks
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
+	// CheckOrigin same-origin policy to prevent CSRF attacks
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
@@ -34,15 +36,30 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// HandleNewShell upgrades HTTP connection to WebSocket and handles shell session
 func HandleNewShell(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("WebSocket upgrade failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Upgrade failed"})
+		c.Abort()
 		return
 	}
 	defer conn.Close()
-	v, _ := c.Get("clientSession")
-	clientSession := v.(*client.ClientSession)
+	v, ok := c.Get("clientSession")
+	if !ok {
+		log.Println("Client session not found")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session"})
+		c.Abort()
+		return
+	}
+	clientSession, ok := v.(*client.ClientSession)
+	if !ok {
+		log.Println("Invalid client session type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session"})
+		c.Abort()
+		return
+	}
 	handleNewConnection(conn, clientSession, c)
 }
 
