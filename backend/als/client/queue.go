@@ -6,18 +6,37 @@ import (
 )
 
 type queueEntry struct {
-	ctx    context.Context    // caller's parent context
-	cancel context.CancelFunc // cancels the internal queueCtx
-	notify func()            // optional position-update callback
+	ctx    context.Context
+	cancel context.CancelFunc
+	notify func()
 }
 
-var (
-	queueLock    sync.Mutex
-	queueEntries []*queueEntry        // ordered slice for FIFO
-	queueWakeup  = make(chan struct{}) // signal to HandleQueue
-)
+type QueueManager struct {
+	mu         sync.Mutex
+	entries    []*queueEntry
+	wakeup     chan struct{}
+	ctx        context.Context
+	cancelFunc context.CancelFunc
+}
 
-func WaitQueue(ctx context.Context, cb func()) {
+func NewQueueManager() *QueueManager {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &QueueManager{
+		entries:    make([]*queueEntry, 0),
+		wakeup:     make(chan struct{}, 1),
+		ctx:        ctx,
+		cancelFunc: cancel,
+	}
+}
+
+func (m *QueueManager) Wakeup() {
+	select {
+	case m.wakeup <- struct{}{}:
+	default:
+	}
+}
+
+func (m *QueueManager) WaitQueue(ctx context.Context, cb func()) {
 	queueCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -27,40 +46,35 @@ func WaitQueue(ctx context.Context, cb func()) {
 		notify: cb,
 	}
 
-	queueLock.Lock()
-	queueEntries = append(queueEntries, entry)
-	queueLock.Unlock()
+	m.mu.Lock()
+	m.entries = append(m.entries, entry)
+	m.mu.Unlock()
 
 	defer func() {
-		queueLock.Lock()
-		for i, e := range queueEntries {
+		m.mu.Lock()
+		for i, e := range m.entries {
 			if e == entry {
-				queueEntries = append(queueEntries[:i], queueEntries[i+1:]...)
+				m.entries = append(m.entries[:i], m.entries[i+1:]...)
 				break
 			}
 		}
-		queueLock.Unlock()
+		m.mu.Unlock()
 	}()
 
-	// Wake up HandleQueue so it can process the new entry
-	select {
-	case queueWakeup <- struct{}{}:
-	default:
-	}
+	m.Wakeup()
 
-	// Block until queueCtx is cancelled (by HandleQueue) or parent ctx is done
 	select {
 	case <-queueCtx.Done():
 	case <-ctx.Done():
 	}
 }
 
-func GetQueuePostitionByCtx(ctx context.Context) (int, int) {
-	queueLock.Lock()
-	defer queueLock.Unlock()
+func (m *QueueManager) GetQueuePositionByCtx(ctx context.Context) (int, int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	total := len(queueEntries)
-	for i, e := range queueEntries {
+	total := len(m.entries)
+	for i, e := range m.entries {
 		if e.ctx == ctx {
 			return i + 1, total
 		}
@@ -68,58 +82,57 @@ func GetQueuePostitionByCtx(ctx context.Context) (int, int) {
 	return 0, 0
 }
 
-func HandleQueue() {
+func (m *QueueManager) HandleQueue() {
 	for {
-		<-queueWakeup
+		select {
+		case <-m.ctx.Done():
+			return
+		case <-m.wakeup:
+		}
 
 		for {
-			// Take the head of queue (FIFO)
-			queueLock.Lock()
-			if len(queueEntries) == 0 {
-				queueLock.Unlock()
+			m.mu.Lock()
+			if len(m.entries) == 0 {
+				m.mu.Unlock()
 				break
 			}
-			head := queueEntries[0]
-			queueLock.Unlock()
+			head := m.entries[0]
+			m.mu.Unlock()
 
-			// Check if the head's parent context is already done
 			select {
 			case <-head.ctx.Done():
-				// Caller already gone; remove and skip
-				queueLock.Lock()
-				if len(queueEntries) > 0 && queueEntries[0] == head {
-					queueEntries = queueEntries[1:]
+				m.mu.Lock()
+				if len(m.entries) > 0 && m.entries[0] == head {
+					m.entries = m.entries[1:]
 				}
-				queueLock.Unlock()
+				m.mu.Unlock()
 				continue
 			default:
 			}
 
-			// Notify the head entry's callback (if any)
 			if head.notify != nil {
 				head.notify()
 			}
 
-			// Release the head: cancel its internal queueCtx so WaitQueue returns
 			head.cancel()
 
-			// Wait for the caller's task to finish (parent ctx done),
-			// so only one task runs at a time
 			<-head.ctx.Done()
 
-			// Clean up the head
-			queueLock.Lock()
-			if len(queueEntries) > 0 && queueEntries[0] == head {
-				queueEntries = queueEntries[1:]
+			m.mu.Lock()
+			if len(m.entries) > 0 && m.entries[0] == head {
+				m.entries = m.entries[1:]
 			}
 
-			// Notify remaining entries of their updated queue position
-			for _, e := range queueEntries {
+			for _, e := range m.entries {
 				if e.notify != nil {
 					e.notify()
 				}
 			}
-			queueLock.Unlock()
+			m.mu.Unlock()
 		}
 	}
+}
+
+func (m *QueueManager) Shutdown() {
+	m.cancelFunc()
 }

@@ -14,12 +14,12 @@ func main() {
 	flag.Parse()
 	if *shell {
 		config.IsInternalCall = true
-		config.Load()
+		cfg := config.NewConfig()
+		cfg.Load()
+		config.Config = cfg
 		fakeshell.HandleConsole()
 		return
 	}
-
-	config.LoadWebConfig()
 
 	als.Init()
 }

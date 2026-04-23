@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samlm0/als/v2/als/client"
 	"github.com/samlm0/als/v2/als/controller"
 	"github.com/samlm0/als/v2/als/controller/cache"
 	"github.com/samlm0/als/v2/als/controller/iperf3"
@@ -16,16 +17,16 @@ import (
 	iEmbed "github.com/samlm0/als/v2/embed"
 )
 
-func SetupHttpRoute(e *gin.Engine) {
-	e.GET("/session", session.Handle)
-	v1 := e.Group("/method", controller.MiddlewareSessionOnHeader())
+func SetupHttpRoute(e *gin.Engine, clientMgr *client.ClientManager) {
+	e.GET("/session", session.Handle(clientMgr))
+	v1 := e.Group("/method", controller.MiddlewareSessionOnHeader(clientMgr))
 	{
 		if config.Config.FeatureIperf3 {
 			v1.GET("/iperf3/server", iperf3.Handle)
 		}
 
 		if config.Config.FeaturePing {
-			v1.GET("/ping", ping.Handle)
+			v1.GET("/ping", ping.Handle(clientMgr))
 		}
 
 		if config.Config.FeatureSpeedtestDotNet {
@@ -37,14 +38,14 @@ func SetupHttpRoute(e *gin.Engine) {
 		}
 	}
 
-	session := e.Group("/session/:session", controller.MiddlewareSessionOnUrl())
+	sessionRoute := e.Group("/session/:session", controller.MiddlewareSessionOnUrl(clientMgr))
 	{
 		if config.Config.FeatureShell {
-			session.GET("/shell", shell.HandleNewShell)
+			sessionRoute.GET("/shell", shell.HandleNewShell)
 		}
 	}
 
-	speedtestRoute := session.Group("/speedtest", controller.MiddlewareSessionOnUrl())
+	speedtestRoute := sessionRoute.Group("/speedtest", controller.MiddlewareSessionOnUrl(clientMgr))
 	{
 		if config.Config.FeatureFileSpeedtest {
 			speedtestRoute.GET("/file/:filename", speedtest.HandleFakeFile)

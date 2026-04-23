@@ -47,7 +47,7 @@ func HandleNewShell(c *gin.Context) {
 }
 
 func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, ginC *gin.Context) {
-	ctx, cancel := context.WithCancel(session.GetContext(ginC.Request.Context()))
+	ctx, cancel := context.WithCancel(session.Context())
 	defer cancel()
 
 	ex, err := os.Executable()
