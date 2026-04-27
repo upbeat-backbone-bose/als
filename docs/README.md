@@ -64,4 +64,4 @@ docker run -d --name looking-glass --restart always --network host ryachueng/loo
 
 ---
 
-*文档最后更新：2026-04-22*
+*文档最后更新：2026-04-27*
