@@ -36,7 +36,8 @@ LABEL org.opencontainers.image.source="https://github.com/upbeat-backbone-bose/a
 LABEL org.opencontainers.image.description="Another Looking-glass Server"
 
 COPY --from=builder_env / /
-COPY --from=builder_golang --chmod=777 /app/als/als /bin/als
+COPY --from=builder_golang /app/als/als /bin/als
+RUN chmod +x /bin/als
 
 RUN apk upgrade --no-cache && rm -rf /var/cache/apk/*
 
