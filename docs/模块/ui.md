@@ -398,7 +398,7 @@ const showLibrespeed = computed(() => config.value.feature_librespeed)
 
 **职责**: 提供网络诊断工具入口
 
-**详见**: [组件交互](#5-组件交互)
+**详见**: [组件交互](#9-组件交互)
 
 ## 5. 工具子组件
 
