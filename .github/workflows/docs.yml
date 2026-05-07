@@ -38,6 +38,8 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Build docs site
+        env:
+          NO_MKDOCS_2_WARNING: "1"
         run: mkdocs build
 
       - name: Setup Pages

@@ -22,6 +22,7 @@ nav:
     - "系统架构": ARCHITECTURE.md
     - "接口文档": INTERFACES.md
     - "开发者指南": DEVELOPER_GUIDE.md
+    - "部署指南": DEPLOYMENT_GUIDE.md
   - "专有概念":
     - "会话机制": 专有概念/会话机制.md
     - "功能开关": 专有概念/功能开关.md
