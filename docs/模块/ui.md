@@ -398,7 +398,7 @@ const showLibrespeed = computed(() => config.value.feature_librespeed)
 
 **职责**: 提供网络诊断工具入口
 
-**详见**: [组件交互](#9-组件交互)
+**详见**: [组件交互](#ui-component-interaction)
 
 ## 5. 工具子组件
 
@@ -971,6 +971,7 @@ eventSource.onerror = (error) => {
 }
 ```
 
+<a id="ui-component-interaction"></a>
 ## 9. 组件交互
 
 ### 9.1 Utilities 组件交互流程
