@@ -40,7 +40,7 @@
     "naive-ui": "^2.44.1",
     "prettier": "^3.8.3",
     "unplugin-auto-import": "^21.0.0",
-    "unplugin-vue-components": "^32.0.0",
+    "unplugin-vue-components": "^32.1.0",
     "v-clipboard": "3.0.0-next.1",
     "vite": "^8.0.13",
     "vue-eslint-parser": "^10.4.0",
