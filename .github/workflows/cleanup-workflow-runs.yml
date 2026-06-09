@@ -1,0 +1,159 @@
+name: Cleanup workflow runs
+
+on:
+  schedule:
+    # Weekly at 03:17 UTC on Monday. Avoid the top of the hour to reduce delay risk.
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: 'Delete completed workflow runs older than this many days'
+        required: false
+        default: '90'
+      min_runs_per_workflow:
+        description: 'Always keep at least this many recent runs for each workflow'
+        required: false
+        default: '20'
+      dry_run:
+        description: 'Preview deletions without deleting workflow runs'
+        required: false
+        default: 'true'
+        type: boolean
+      protected_workflows:
+        description: 'Comma-separated workflow names that must never be deleted by this cleanup job'
+        required: false
+        default: 'Build with release,docker image build,Deploy Docs to GitHub Pages'
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: cleanup-workflow-runs
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      RETENTION_DAYS: ${{ github.event.inputs.retention_days || '90' }}
+      MIN_RUNS_PER_WORKFLOW: ${{ github.event.inputs.min_runs_per_workflow || '20' }}
+      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+      PROTECTED_WORKFLOWS: ${{ github.event.inputs.protected_workflows || 'Build with release,docker image build,Deploy Docs to GitHub Pages' }}
+    steps:
+      - name: Delete old completed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]] || [ "$RETENTION_DAYS" -lt 1 ]; then
+            echo "RETENTION_DAYS must be a positive integer, got: $RETENTION_DAYS" >&2
+            exit 1
+          fi
+
+          if ! [[ "$MIN_RUNS_PER_WORKFLOW" =~ ^[0-9]+$ ]]; then
+            echo "MIN_RUNS_PER_WORKFLOW must be a non-negative integer, got: $MIN_RUNS_PER_WORKFLOW" >&2
+            exit 1
+          fi
+
+          if [ "$DRY_RUN" != "true" ] && [ "$DRY_RUN" != "false" ]; then
+            echo "DRY_RUN must be either true or false, got: $DRY_RUN" >&2
+            exit 1
+          fi
+
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs"
+          cutoff_epoch="$(date -u -d "${RETENTION_DAYS} days ago" +%s)"
+          page=1
+          scanned=0
+          candidates=0
+          deleted=0
+          declare -A seen_by_workflow
+          candidate_ids=()
+          candidate_descriptions=()
+          protected_workflows=",${PROTECTED_WORKFLOWS},"
+
+          echo "Cleanup policy:"
+          echo "- retention_days=${RETENTION_DAYS}"
+          echo "- min_runs_per_workflow=${MIN_RUNS_PER_WORKFLOW}"
+          echo "- dry_run=${DRY_RUN}"
+          echo "- protected_workflows=${PROTECTED_WORKFLOWS}"
+
+          while :; do
+            response="$(curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}?status=completed&per_page=100&page=${page}")"
+
+            run_count="$(jq '.workflow_runs | length' <<<"${response}")"
+            if [ "$run_count" -eq 0 ]; then
+              break
+            fi
+
+            while IFS=$'\t' read -r run_id workflow_id workflow_name created_at html_url; do
+              scanned=$((scanned + 1))
+              seen="${seen_by_workflow[$workflow_id]:-0}"
+              seen=$((seen + 1))
+              seen_by_workflow[$workflow_id]="$seen"
+
+              created_epoch="$(date -u -d "$created_at" +%s)"
+              if [ "$created_epoch" -ge "$cutoff_epoch" ]; then
+                continue
+              fi
+
+              if [[ "$protected_workflows" == *",${workflow_name},"* ]]; then
+                continue
+              fi
+
+              if [ "$seen" -le "$MIN_RUNS_PER_WORKFLOW" ]; then
+                continue
+              fi
+
+              candidates=$((candidates + 1))
+              candidate_ids+=("$run_id")
+              candidate_descriptions+=("run_id=${run_id} workflow=${workflow_name} created_at=${created_at} url=${html_url}")
+            done < <(jq -r '.workflow_runs[] | [.id, .workflow_id, (.name // "unknown"), .created_at, .html_url] | @tsv' <<<"${response}")
+
+            page=$((page + 1))
+          done
+
+          for index in "${!candidate_ids[@]}"; do
+            run_id="${candidate_ids[$index]}"
+            echo "Delete candidate: ${candidate_descriptions[$index]}"
+
+            if [ "$DRY_RUN" = "true" ]; then
+              continue
+            fi
+
+            status="$(curl -sS -o /tmp/delete-workflow-run-response -w "%{http_code}" -L \
+              --retry 3 \
+              --retry-delay 5 \
+              --retry-all-errors \
+              -X DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api}/${run_id}")"
+
+            if [ "$status" != "204" ]; then
+              echo "Failed to delete run ${run_id}; HTTP status ${status}" >&2
+              cat /tmp/delete-workflow-run-response >&2 || true
+              exit 1
+            fi
+
+            deleted=$((deleted + 1))
+          done
+
+          {
+            echo "## Workflow run cleanup"
+            echo
+            echo "- Completed runs scanned: ${scanned}"
+            echo "- Delete candidates: ${candidates}"
+            echo "- Deleted runs: ${deleted}"
+            echo "- Retention days: ${RETENTION_DAYS}"
+            echo "- Minimum runs kept per workflow: ${MIN_RUNS_PER_WORKFLOW}"
+            echo "- Dry run: ${DRY_RUN}"
+            echo "- Protected workflows: ${PROTECTED_WORKFLOWS}"
+          } >> "$GITHUB_STEP_SUMMARY"
