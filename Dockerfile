@@ -10,7 +10,7 @@ COPY --from=builder_node_js_cache /app/node_modules /app/node_modules
 RUN npm run build \
     && chmod -R 650 /app/dist
 
-FROM golang:1.26.2-alpine AS builder_golang
+FROM golang:1.26.4-alpine AS builder_golang
 ADD backend /app
 WORKDIR /app
 COPY --from=builder_node_js /app/dist /app/embed/ui
@@ -39,7 +39,9 @@ COPY --from=builder_env / /
 COPY --from=builder_golang /app/als/als /bin/als
 RUN chmod +x /bin/als
 
-RUN apk upgrade --no-cache && rm -rf /var/cache/apk/*
+RUN apk upgrade --no-cache && \
+    apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/main "busybox>=1.37.0-r31" && \
+    rm -rf /var/cache/apk/*
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:80 || exit 1
