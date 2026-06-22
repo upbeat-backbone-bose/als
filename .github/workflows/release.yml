@@ -12,7 +12,7 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - uses: actions/setup-node@v6.4.0
@@ -41,7 +41,7 @@ jobs:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6.4.0
         with:
           go-version-file: 'backend/go.mod'
