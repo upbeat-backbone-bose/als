@@ -13,8 +13,6 @@ const working = ref(false)
 const port = ref(0)
 const timeout = ref(0)
 const timeoutPercentage = ref(0)
-const timePass = ref(0)
-const timeoutTimer = ref()
 
 const terminal = new Terminal()
 const terminalRef = ref()
@@ -49,7 +47,7 @@ const startServer = async () => {
 
   try {
     await appStore.requestMethod('iperf3/server', {}, abortController.signal)
-  } catch (e) {}
+  } catch {}
 
   working.value = false
 }

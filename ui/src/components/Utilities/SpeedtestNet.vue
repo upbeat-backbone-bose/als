@@ -111,7 +111,7 @@ const speedtest = async () => {
       { node_id: serverId.value },
       abortController.signal
     )
-  } catch (e) {}
+  } catch {}
   appStore.source.removeEventListener('SpeedtestStream', handleMessage)
   working.value = false
 }

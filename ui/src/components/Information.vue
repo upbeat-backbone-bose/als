@@ -2,10 +2,8 @@
 import { useAppStore } from '@/stores/app'
 import Copyable from './Copy.vue'
 import Markdown from 'vue3-markdown-it'
-import { useI18n } from 'vue-i18n'
 
 const appStore = useAppStore()
-const { t } = useI18n({ useScope: 'global' })
 const configKeyMap = ref({
   location: 'server_location',
   my_ip: 'my_address',

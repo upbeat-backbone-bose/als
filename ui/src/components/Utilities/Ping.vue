@@ -46,7 +46,7 @@ const ping = async () => {
   appStore.source.addEventListener('Ping', handlePingMessage)
   try {
     await appStore.requestMethod('ping', { ip: host.value }, abortController.signal)
-  } catch (e) {}
+  } catch {}
   stopPing()
   working.value = false
 }

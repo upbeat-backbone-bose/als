@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import axios from 'axios'
 import { formatBytes } from '@/helper/unit'
@@ -46,7 +46,7 @@ export const useAppStore = defineStore('app', () => {
       memoryUsage.value = formatBytes(e.data)
     })
 
-    eventSource.onerror = function (e) {
+    eventSource.onerror = function () {
       eventSource.close()
       connecting.value = true
       console.log('SSE disconnected')

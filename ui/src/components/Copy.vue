@@ -15,7 +15,7 @@ const { t } = useI18n({ useScope: 'global' })
 const copy = async (value) => {
   try {
     await navigator.clipboard.writeText(value)
-  } catch (error) {
+  } catch {
     const textarea = document.createElement('textarea')
     document.body.appendChild(textarea)
     textarea.textContent = value

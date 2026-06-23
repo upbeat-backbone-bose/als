@@ -47,7 +47,7 @@ onMounted(() => {
     flushToTerminal()
   })
 
-  websocket.addEventListener('open', (event) => {
+  websocket.addEventListener('open', () => {
     window.addEventListener('resize', handleResize)
 
     handleResize()
