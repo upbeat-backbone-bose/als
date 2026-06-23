@@ -2,16 +2,25 @@ package client
 
 import (
 	"context"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
-var handlerOnce sync.Once
+// resetQueueForTest cancels any entries still parked in the queue, clears
+// global state, and drains pending wakeup signals so each test starts
+// from a known-clean baseline.
+func resetQueueForTest(t *testing.T) {
+	t.Helper()
 
-// resetQueueForTest clears global queue state and drains wakeup channel.
-func resetQueueForTest() {
 	queueLock.Lock()
+	for _, e := range queueEntries {
+		if e != nil && e.cancel != nil {
+			e.cancel()
+		}
+	}
 	queueEntries = nil
 	queueLock.Unlock()
 
@@ -24,83 +33,270 @@ func resetQueueForTest() {
 	}
 }
 
-func TestHandleQueueFIFO(t *testing.T) {
-	resetQueueForTest()
-
-	// Start handler loop
-	handlerOnce.Do(func() { go HandleQueue() })
-
-	var orderMu sync.Mutex
-	order := []string{}
-
-	ctx1, cancel1 := context.WithCancel(context.Background())
-	ctx2, cancel2 := context.WithCancel(context.Background())
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		WaitQueue(ctx1, func() {
-			orderMu.Lock()
-			order = append(order, "1")
-			orderMu.Unlock()
-			cancel1() // unblock HandleQueue waiting on parent ctx
-		})
-		wg.Done()
-	}()
-
-	// Ensure ctx1 enqueued before ctx2
-	time.Sleep(20 * time.Millisecond)
-
-	go func() {
-		WaitQueue(ctx2, func() {
-			orderMu.Lock()
-			order = append(order, "2")
-			orderMu.Unlock()
-			cancel2()
-		})
-		wg.Done()
-	}()
-
+// startHandler launches an isolated HandleQueue goroutine bound to a
+// cancellable context. The goroutine exits when ctx is cancelled, so
+// tests can run independently without sharing a long-lived handler.
+//
+// Returns (handlerCtx, stop). The handler is guaranteed to be parked in
+// its outer select on <-queueWakeup before startHandler returns.
+func startHandler(t *testing.T) (handlerCtx context.Context, stop func()) {
+	t.Helper()
+	handlerCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		wg.Wait()
-		close(done)
+		defer close(done)
+		HandleQueue(handlerCtx)
 	}()
 
+	// Synchronization barrier: send two warm-up wakeups. The first send
+	// blocks until the handler is in its outer select; the handler
+	// consumes it, runs an empty inner pass, then returns to the outer
+	// select. The second send then rendezvous with the parked handler,
+	// guaranteeing by the time it returns that the handler is ready.
+	doneWarmup := make(chan struct{})
+	go func() {
+		defer close(doneWarmup)
+		queueWakeup <- struct{}{}
+		queueWakeup <- struct{}{}
+	}()
 	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("WaitQueue did not return in time")
+	case <-doneWarmup:
+	case <-time.After(2 * time.Second):
+		t.Fatal("HandleQueue never reached <-queueWakeup within 2s")
 	}
+
+	return handlerCtx, func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("HandleQueue did not exit in time")
+		}
+	}
+}
+
+// awaitEnqueued polls until ctx is found in queueEntries. Replaces
+// time.Sleep-based synchronization.
+func awaitEnqueued(t *testing.T, ctx context.Context) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		queueLock.Lock()
+		found := false
+		for _, e := range queueEntries {
+			if e.ctx == ctx {
+				found = true
+				break
+			}
+		}
+		remaining := len(queueEntries)
+		queueLock.Unlock()
+		if found {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("context never enqueued within 2s; queue size=%d", remaining)
+		}
+		runtime.Gosched()
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// awaitNotify waits until calls has reached want.
+func awaitNotify(t *testing.T, calls *atomic.Int32, want int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for calls.Load() < want {
+		if time.Now().After(deadline) {
+			t.Fatalf("notify fired %d times; want %d", calls.Load(), want)
+		}
+		runtime.Gosched()
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// gate is a per-entry handshake: the notify callback signals "entered"
+// (so the test knows the handler has begun processing this entry) and
+// blocks on "release" (so the handler cannot advance until the test
+// explicitly releases it). This lets tests observe FIFO ordering without
+// race-prone enqueue-time polling.
+type gate struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func newGate() *gate {
+	return &gate{entered: make(chan struct{}), release: make(chan struct{})}
+}
+
+func TestHandleQueueFIFO(t *testing.T) {
+	resetQueueForTest(t)
+	_, stop := startHandler(t)
+	defer stop()
+
+	// We enqueue one entry, let the handler fully process it (notify +
+	// release), then enqueue the next. This avoids the wakeup-channel
+	// race when the handler is parked inside a notify callback: a new
+	// entry's wakeup would be silently dropped because the handler is
+	// not yet back in the outer select.
+	var (
+		orderMu sync.Mutex
+		order   []string
+	)
+	var wg sync.WaitGroup
+
+	runEntry := func(label string) {
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			WaitQueue(ctx, func() {
+				orderMu.Lock()
+				order = append(order, label)
+				orderMu.Unlock()
+				close(entered)
+				<-release
+			})
+		}()
+
+		select {
+		case <-entered:
+		case <-time.After(3 * time.Second):
+			t.Fatalf("%s notify never fired", label)
+		}
+		close(release)
+		cancel()
+
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			t.Fatalf("%s WaitQueue did not return", label)
+		}
+	}
+
+	runEntry("1")
+	runEntry("2")
 
 	orderMu.Lock()
 	defer orderMu.Unlock()
 	if len(order) != 2 {
-		t.Fatalf("expected 2 callbacks, got %d: %v", len(order), order)
+		t.Fatalf("expected 2 notifies, got %d: %v", len(order), order)
 	}
-
-	// Because callbacks run before cancellation, enforce FIFO by initial enqueue order.
 	if order[0] != "1" || order[1] != "2" {
 		t.Fatalf("expected FIFO order [1 2], got %v", order)
 	}
 }
 
-func TestGetQueuePosition(t *testing.T) {
-	resetQueueForTest()
+func TestHandleQueueSkipsAlreadyDoneHead(t *testing.T) {
+	resetQueueForTest(t)
+	_, stop := startHandler(t)
+	defer stop()
 
-	// empty queue
+	var calls atomic.Int32
+
+	headCtx, headCancel := context.WithCancel(context.Background())
+	var cancelOnce sync.Once
+	entry := &queueEntry{
+		ctx:    headCtx,
+		cancel: func() { cancelOnce.Do(func() {}) },
+		notify: func() { calls.Add(1) },
+	}
+	queueLock.Lock()
+	queueEntries = append(queueEntries, entry)
+	queueLock.Unlock()
+
+	headCancel()
+
+	select {
+	case queueWakeup <- struct{}{}:
+	default:
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		queueLock.Lock()
+		remaining := len(queueEntries)
+		queueLock.Unlock()
+		if remaining == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("head not removed; remaining=%d", remaining)
+		}
+		runtime.Gosched()
+		time.Sleep(time.Millisecond)
+	}
+
+	if got := calls.Load(); got != 0 {
+		t.Errorf("notify called %d times for already-done head; want 0", got)
+	}
+}
+
+func TestWaitQueueReturnsWhenCallerCtxCancelled(t *testing.T) {
+	resetQueueForTest(t)
+	// No handler running: we test WaitQueue in isolation.
+
+	callerCtx, callerCancel := context.WithCancel(context.Background())
+	returned := make(chan struct{})
+	go func() {
+		WaitQueue(callerCtx, nil)
+		close(returned)
+	}()
+	awaitEnqueued(t, callerCtx)
+
+	callerCancel()
+
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitQueue did not return after caller cancel")
+	}
+}
+
+func TestHandleQueueExitsOnCtxCancel(t *testing.T) {
+	resetQueueForTest(t)
+
+	// Start a handler, give it a moment to settle, then cancel its ctx.
+	// The goroutine should exit within a short window even though it is
+	// parked in <-queueWakeup.
+	handlerCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		HandleQueue(handlerCtx)
+	}()
+	runtime.Gosched()
+	time.Sleep(20 * time.Millisecond)
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("HandleQueue did not exit after ctx cancel")
+	}
+}
+
+func TestGetQueuePosition(t *testing.T) {
+	resetQueueForTest(t)
+
 	if pos, total := GetQueuePositionByCtx(context.Background()); pos != 0 || total != 0 {
 		t.Errorf("empty queue: got (%d, %d); want (0, 0)", pos, total)
 	}
 
-	// Seed two entries with two distinct ctxs, look up by ctx pointer.
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	defer cancel1()
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 
-	// Enqueue directly (bypass WaitQueue to avoid blocking).
 	queueLock.Lock()
 	queueEntries = append(queueEntries,
 		&queueEntry{ctx: ctx1},

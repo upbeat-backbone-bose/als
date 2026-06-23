@@ -1,6 +1,7 @@
 package als
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -22,7 +23,7 @@ func Init() {
 		go timer.SetupInterfaceBroadcast()
 	}
 	go timer.UpdateSystemResource()
-	go client.HandleQueue()
+	go client.HandleQueue(context.Background())
 	go cleanupExpiredClients()
 	aHttp.Start()
 }

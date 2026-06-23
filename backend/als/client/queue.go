@@ -68,9 +68,16 @@ func GetQueuePositionByCtx(ctx context.Context) (int, int) {
 	return 0, 0
 }
 
-func HandleQueue() {
+// HandleQueue drains the global FIFO queue until ctx is cancelled.
+// Cancellation makes the outer loop exit promptly; in-flight entries
+// already being processed are allowed to finish.
+func HandleQueue(ctx context.Context) {
 	for {
-		<-queueWakeup
+		select {
+		case <-ctx.Done():
+			return
+		case <-queueWakeup:
+		}
 
 		for {
 			// Take the head of queue (FIFO)
@@ -81,6 +88,13 @@ func HandleQueue() {
 			}
 			head := queueEntries[0]
 			queueLock.Unlock()
+
+			// Bail out promptly if cancellation arrives between entries.
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 
 			// Check if the head's parent context is already done
 			select {
