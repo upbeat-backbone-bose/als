@@ -22,8 +22,6 @@ function startInFlightServer() {
 }
 
 function getLatestTerminal() {
-  // The Terminal constructor is mocked at the module level. Each instance is
-  // a fresh mock. We pull the most recent one by inspecting mock.calls.
   const calls = Terminal.mock.calls
   if (calls.length === 0) return null
   return Terminal.mock.results[calls.length - 1].value
@@ -33,12 +31,9 @@ describe('IPerf3.vue (SSE)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     Terminal.mockClear()
-    // IPerf3.vue reads appStore.config.public_ipv4 / public_ipv6 in its
-    // template. The store starts with config = undefined, which would
-    // raise "Cannot read properties of undefined" on first render. Set a
-    // minimal config so the template's optional guards are exercised.
-    const store = useAppStore()
-    store.config = { public_ipv4: '1.2.3.4', public_ipv6: '' }
+    // No pre-set store.config: IPerf3.vue must guard against appStore.config
+    // being undefined. The fix uses optional chaining in the v-if guards
+    // so the alert body stays safe when Config SSE has not arrived yet.
   })
 
   afterEach(() => {
@@ -87,7 +82,6 @@ describe('IPerf3.vue (SSE)', () => {
     store.source.dispatchEvent('Iperf3', '5201')
     await flushPromises()
 
-    // The component sets port.value = e.data on the Iperf3 listener.
     const setupState = wrapper.vm.$.setupState
     expect(setupState.port).toBe('5201')
 
@@ -103,14 +97,12 @@ describe('IPerf3.vue (SSE)', () => {
 
     const term = getLatestTerminal()
     expect(term).not.toBeNull()
-    // Reset writeln call count to isolate this case
     term.writeln.mockClear()
 
     const store = useAppStore()
     store.source.dispatchEvent('Iperf3Stream', 'line one\nline two\nline three')
     await flushPromises()
 
-    // The handler splits on \n and writelns each line.
     expect(term.writeln).toHaveBeenCalledTimes(3)
     expect(term.writeln).toHaveBeenNthCalledWith(1, 'line one')
     expect(term.writeln).toHaveBeenNthCalledWith(2, 'line two')
@@ -133,6 +125,44 @@ describe('IPerf3.vue (SSE)', () => {
     wrapper.unmount()
     expect(store.source._listeners['Iperf3']).toEqual([])
     expect(store.source._listeners['Iperf3Stream']).toEqual([])
+    inflight.resolve()
+  })
+
+  // Regression test for the IPerf3.vue config-undefined crash. The alert
+  // body reads appStore.config.public_ipv4 / public_ipv6; with config
+  // still undefined (no Config SSE yet) and a non-empty port, the alert
+  // block must not throw and the body must render without the IP
+  // templates (the per-IP v-if guards correctly evaluate to false).
+  it('renders the alert safely when port is set but config is undefined', async () => {
+    const wrapper = createWrapper()
+    const inflight = startInFlightServer()
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    const store = useAppStore()
+    // port set by the SSE event
+    store.source.dispatchEvent('Iperf3', '5201')
+    await flushPromises()
+    // The alert mounts (working=true, port='5201'). Before the fix this
+    // threw "Cannot read properties of undefined (reading 'public_ipv4')"
+    // because the v-if guard accessed the property directly. After the
+    // fix (optional chaining) the inner v-if templates simply do not
+    // render. Verify no Copy stub is present.
+    expect(wrapper.find('.copy-stub').exists()).toBe(false)
+    inflight.resolve()
+  })
+
+  it('renders the IPv4 Copy template once config arrives', async () => {
+    const wrapper = createWrapper()
+    const inflight = startInFlightServer()
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    const store = useAppStore()
+    // arrive config + port
+    store.config = { public_ipv4: '1.2.3.4', public_ipv6: '' }
+    store.source.dispatchEvent('Iperf3', '5201')
+    await flushPromises()
+    // The Copy stub template is rendered for the IPv4 path
+    expect(wrapper.find('.copy-stub').exists()).toBe(true)
     inflight.resolve()
   })
 })

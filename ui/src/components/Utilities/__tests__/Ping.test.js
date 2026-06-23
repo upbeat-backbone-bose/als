@@ -102,41 +102,40 @@ describe('Ping.vue (SSE)', () => {
     expect(store.source._listeners['Ping']).toEqual([])
   })
 
-  // KNOWN BUG: Ping.vue's template calls record.latency.toFixed(2) without
-  // checking the latency value. When the backend sends a timeout event the
-  // handler sets latency to the string '-', and string.toFixed(2) throws
-  // TypeError during render. The test below documents the current behavior
-  // by checking the data that the handler wrote before the render attempt.
-  it('handler stores "-" as latency on timeout (template will fail to render)', async () => {
-    // Install a Vue error handler so the toFixed(2) TypeError on render
-    // does not fail the test; we are only verifying the handler's data path.
-    const errs = []
+  // KNOWN BUG (FIXED): Ping.vue's template previously called
+  // record.latency.toFixed(2) without checking the value. The handler
+  // stores '-' on a timeout event, and '-' .toFixed(2) used to throw
+  // TypeError during render. The template is now guarded with a
+  // v-if/v-else so the placeholder is rendered as text. This test
+  // pins the fix: a timeout event must not throw, and the row must
+  // render '- ms' (not a number).
+  it('renders "- ms" for a timeout event without throwing', async () => {
     const wrapper = createWrapper()
-    wrapper.vm.$.appContext.app.config.errorHandler = (err) => errs.push(err)
     const inflight = startInFlightPing()
     await wrapper.find('input').setValue('1.1.1.1')
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
     const store = useAppStore()
+    // A render error here would propagate to the test runner (uncaught
+    // errors fail the test). The test passes if the dispatch + flush
+    // complete without throwing.
     store.source.dispatchEvent('Ping', JSON.stringify({ seq: 1, is_timeout: true }))
     await flushPromises()
 
-    // The handler should have pushed a record with latency = '-'. We can
-    // inspect records via the next tick's component instance since the
-    // template threw before rendering. The component's `records` ref is
-    // accessible through the wrapped setup proxy.
-    // Note: a render error means the v-for may not have run, but the
-    // ref was mutated by the SSE handler.
-    // We use a separate component instance to read the records field:
+    // Verify the data path: handler stored '-' as the latency string.
     const records = wrapper.vm.$?.setupState?.records ?? wrapper.vm.records
     expect(records).toBeDefined()
     expect(records.length).toBe(1)
     expect(records[0].latency).toBe('-')
 
-    // The render error path produced at least one toFixed TypeError.
-    const hasToFixedError = errs.some((e) => /toFixed/.test(String(e.message)))
-    expect(hasToFixedError).toBe(true)
+    // Verify the render path: the row's latency cell renders '- ms'
+    // text instead of a numeric value. We assert on html() because the
+    // table uses v-show (hidden when records is empty, visible here).
+    const html = wrapper.html()
+    expect(html).toMatch(/>- ms<\//)
+    // And the broken '.toFixed(2)' string must not be present.
+    expect(html).not.toMatch(/\.toFixed/)
 
     inflight.resolve()
   })
