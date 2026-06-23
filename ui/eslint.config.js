@@ -16,7 +16,7 @@ export default [
     rules: {
       'no-undef': 'off',
       'no-empty': 'off',
-      'no-unused-vars': 'off',
+      'no-unused-vars': 'warn',
       'no-prototype-builtins': 'off',
       'vue/multi-word-component-names': 'off',
       'vue/no-side-effects-in-computed-properties': 'off',
