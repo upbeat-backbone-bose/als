@@ -4,6 +4,8 @@
 
 **最后更新**: 2026-04-22
 
+> 本文档描述「控制台 (Fake Shell)」功能的**端到端视图**：前端 Xterm 终端 → WebSocket 桥 → `backend/fakeshell/` 限制命令菜单。如需了解最内层 Go 包（菜单、命令注册、白名单）的实现细节，见 [FakeShell 模块](fakeshell.md)。该功能由 feature flag `FeatureShell` (环境变量 `UTILITIES_FAKESHELL`) 统一控制，详见 [功能开关 §3.4](feature-flags.md#34)。
+
 ## 1. 概述
 
 ALS 的控制台（Fake Shell）功能提供一个基于 WebSocket 的限制性交互式终端。它允许用户通过网络执行预定义的网络诊断命令，但不会暴露完整的系统 Shell。
