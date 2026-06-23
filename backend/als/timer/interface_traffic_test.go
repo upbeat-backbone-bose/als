@@ -1,0 +1,99 @@
+package timer
+
+import (
+	"reflect"
+	"testing"
+	"time"
+)
+
+// withInterfaceCaches replaces the global map for the duration of t.
+func withInterfaceCaches(t *testing.T, m map[int]*InterfaceTrafficCache) {
+	t.Helper()
+	prev := InterfaceCaches
+	interfaceCachesMu.Lock()
+	InterfaceCaches = m
+	interfaceCachesMu.Unlock()
+	t.Cleanup(func() {
+		interfaceCachesMu.Lock()
+		InterfaceCaches = prev
+		interfaceCachesMu.Unlock()
+	})
+}
+
+func TestGetInterfaceCachesSnapshotEmpty(t *testing.T) {
+	withInterfaceCaches(t, map[int]*InterfaceTrafficCache{})
+
+	got := GetInterfaceCachesSnapshot()
+	if got == nil {
+		t.Fatal("snapshot is nil")
+	}
+	if len(got) != 0 {
+		t.Errorf("snapshot len = %d; want 0", len(got))
+	}
+}
+
+func TestGetInterfaceCachesSnapshotCopiesEntries(t *testing.T) {
+	now := time.Now()
+	src := map[int]*InterfaceTrafficCache{
+		1: {
+			InterfaceName: "eth0",
+			LastCacheTime: now,
+			Caches:        [][3]uint64{{uint64(now.Unix()), 1024, 2048}},
+			LastRx:        1024,
+			LastTx:        2048,
+		},
+		2: {
+			InterfaceName: "eth1",
+			LastCacheTime: now,
+			Caches:        [][3]uint64{{uint64(now.Unix()), 512, 256}},
+			LastRx:        512,
+			LastTx:        256,
+		},
+	}
+	withInterfaceCaches(t, src)
+
+	got := GetInterfaceCachesSnapshot()
+	if len(got) != 2 {
+		t.Fatalf("snapshot len = %d; want 2", len(got))
+	}
+
+	for idx, want := range src {
+		entry, ok := got[idx]
+		if !ok {
+			t.Errorf("idx %d missing from snapshot", idx)
+			continue
+		}
+		if entry.InterfaceName != want.InterfaceName {
+			t.Errorf("InterfaceName = %q; want %q", entry.InterfaceName, want.InterfaceName)
+		}
+		if !reflect.DeepEqual(entry.Caches, want.Caches) {
+			t.Errorf("Caches = %v; want %v", entry.Caches, want.Caches)
+		}
+		if entry.LastRx != want.LastRx || entry.LastTx != want.LastTx {
+			t.Errorf("counters = (%d,%d); want (%d,%d)", entry.LastRx, entry.LastTx, want.LastRx, want.LastTx)
+		}
+	}
+
+	// Mutating the snapshot must not affect the source map (deep copy).
+	got[1].LastRx = 9999
+	if src[1].LastRx != 1024 {
+		t.Errorf("source map mutated through snapshot; got %d", src[1].LastRx)
+	}
+}
+
+func TestGetInterfaceCachesSnapshotIndependentCaches(t *testing.T) {
+	src := map[int]*InterfaceTrafficCache{
+		1: {
+			InterfaceName: "eth0",
+			Caches:        [][3]uint64{{1, 2, 3}, {4, 5, 6}},
+		},
+	}
+	withInterfaceCaches(t, src)
+
+	got := GetInterfaceCachesSnapshot()
+	got[1].Caches[0][0] = 999
+
+	if src[1].Caches[0][0] != 1 {
+		t.Errorf("source Caches mutated through snapshot; got %d", src[1].Caches[0][0])
+	}
+}

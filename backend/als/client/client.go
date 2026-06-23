@@ -13,6 +13,12 @@ var (
 	Clients   = make(map[string]*ClientSession)
 )
 
+// ClientsMu exposes the package-internal mutex to tests in other
+// packages that need to seed/inspect Clients without racing. Production
+// code should use the higher-level helpers (AddClient, GetClient,
+// RemoveExpiredClients, etc.) instead.
+func ClientsMu() *sync.RWMutex { return &clientsMu }
+
 type Message struct {
 	Name    string
 	Content string
