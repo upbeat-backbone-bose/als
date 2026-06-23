@@ -4,6 +4,8 @@
 
 **最后更新**: 2026-04-22
 
+> 本文档描述的是**端到端「控制台 (Fake Shell)」功能的最内层**（命令白名单实现层）。完整端到端链路（前端 Xterm → WebSocket 桥 → 本包）见 [控制台 (Fake Shell)](console.md#1)；该功能由 feature flag `FeatureShell` (环境变量 `UTILITIES_FAKESHELL`) 统一控制，详见 [功能开关 §3.4](feature-flags.md#34)。
+
 ## 1. 模块概述
 
 FakeShell 模块实现一个交互式的限制命令菜单系统，提供基于 PTY 的伪终端体验。它是 ALS Shell 功能的核心，负责命令的注册、解析和执行。

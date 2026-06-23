@@ -79,6 +79,18 @@ type ALSConfig struct {
 |---------|---------|--------|----------|
 | `FeatureIfaceTraffic` | `DISPLAY_TRAFFIC` | `true` | 实时网卡流量显示 |
 
+### 3.4 命名说明
+
+`FeatureShell` / `UTILITIES_FAKESHELL` 控制的**是端到端的「控制台 (Fake Shell)」功能**，不是单一的某个 Go 包。完整链路为：
+
+- 前端 `ui/src/components/Utilities/Shell.vue`（Xterm 终端）
+- WebSocket 桥 `backend/als/controller/shell/shell.go`（WS ↔ PTY 双向转发）
+- 限制命令实现 `backend/fakeshell/`（白名单命令菜单，`HandleConsole()`）
+
+三层共同构成一个端到端功能，由 `FeatureShell` 一个开关统一控制。详细架构、组件关系与安全机制见 [控制台 (Fake Shell)](console.md#1) 概念文档；最内层 `fakeshell` 包本身的实现见 [FakeShell 模块](fakeshell.md)。
+
+> 命名约定：`Shell` 指整个端到端功能；`Fake Shell` / `fakeshell` 特指命令白名单实现层（基于 `reeflective/console` 库，不是 bash）。flag 名字中保留 `FAKESHELL` 是历史原因，本节起新代码注释请使用「控制台」或「console」描述此功能。
+
 ## 4. 配置方式
 
 ### 4.1 环境变量配置
