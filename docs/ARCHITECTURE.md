@@ -1,6 +1,7 @@
 # 系统架构
 
 **最后更新**: 2026-06-23
+<!-- 同步自 ui/ 分支 260623-feat-tailwind-vitest-vueuse -->
 
 ## 1. 系统概述
 
@@ -67,22 +68,36 @@ ui/
 │   │   ├── Speedtest.vue   # 测速组件
 │   │   ├── Utilities.vue   # 工具集合组件
 │   │   ├── TrafficDisplay.vue  # 流量显示
+│   │   ├── __tests__/          # 组件测试 (Vitest)
+│   │   │   ├── Copy.test.js
+│   │   │   └── Loading.test.js
 │   │   └── Utilities/
 │   │       ├── Ping.vue    # Ping 工具
 │   │       ├── IPerf3.vue  # iPerf3 工具
 │   │       ├── Shell.vue   # Shell 终端
 │   │       └── SpeedtestNet.vue  # Speedtest.net
+│   ├── assets/
+│   │   └── base.css        # Tailwind v4 入口样式
 │   ├── config/
-│   │   └── lang.js         # 多语言配置
+│   │   ├── lang.js         # 多语言配置
+│   │   └── lang.test.js    # 多语言测试
 │   ├── locales/            # 翻译文件
 │   ├── stores/
-│   │   └── app.js          # 全局状态
+│   │   ├── app.js          # 全局状态
+│   │   └── __tests__/
+│   │       └── app.test.js # Pinia Store 测试
 │   ├── helper/
-│   │   └── unit.js         # 工具函数
+│   │   ├── unit.js         # 工具函数
+│   │   └── unit.test.js    # 工具函数测试
+│   ├── test-setup.js       # Vitest 全局 mock
 │   ├── App.vue             # 根组件
 │   └── main.js             # 入口文件
 ├── public/
 │   └── speedtest_worker.js # 测速 Web Worker
+├── vite.config.js          # Vite 入口 (薄壳)
+├── vite.shared.js          # 共享 Vite 插件栈 (vue/tailwindcss/auto-import)
+├── vitest.config.js        # Vitest 配置
+├── eslint.config.js        # ESLint 10 flat config
 └── package.json
 ```
 

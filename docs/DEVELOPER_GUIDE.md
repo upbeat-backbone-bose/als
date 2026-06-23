@@ -1,6 +1,7 @@
 # 开发者指南
 
 **最后更新**: 2026-06-23
+<!-- 同步自 ui/ 分支 260623-feat-tailwind-vitest-vueuse -->
 
 ## 1. 开发环境搭建
 
@@ -104,28 +105,25 @@ cd backend && go run .
 **完整构建流程**:
 
 ```bash
-# 1. 构建前端
+# 1. 构建前端 (vite build 完成后会自动把 speedtest/speedtest_worker.js 拷贝到 dist/)
 cd ui
+npm install
 npm run build
 
-# 2. 复制前端到后端嵌入目录
-cp -r dist ../backend/embed/ui
+# 2. 把前端构建物放到后端嵌入目录
+cp -r dist/* ../backend/embed/ui/
 
-# 3. 构建后端
+# 3. 构建后端 (Go embed 自动打包静态文件)
 cd ../backend
 go build -o als
 ```
 
-**一键构建脚本**:
-```bash
-cd backend
-go build -o als
-```
-
-**说明**: 
+**说明**:
 - 前端构建物输出到 `ui/dist/`
-- 需要手动复制到 `backend/embed/ui/`
-- Go embed 自动嵌入静态文件
+- `vite.shared.js` 的 `build-script` 插件会在 `vite build` 时自动把 `speedtest/speedtest_worker.js` 复制到 `ui/dist/`
+- Go embed 会在编译时把 `backend/embed/ui/` 全部打包进二进制
+
+> ⚠️ 当前 `vite build` 不会自动把整个 `dist/` 复制到 `backend/embed/ui/`，这一步仍需手动执行（或通过 Docker 构建阶段 / CI 流程完成，参见 `.github/workflows/ci.yml` 的 `build-ui` → `download-artifact` → `embed/ui` 链路）。
 
 ### 2.3 交叉编译
 

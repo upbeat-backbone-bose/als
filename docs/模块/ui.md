@@ -3,6 +3,7 @@
 **模块路径**: `ui/`
 
 **最后更新**: 2026-06-23
+<!-- 同步自 ui/ 分支 260623-feat-tailwind-vitest-vueuse -->
 
 ## 1. 模块概述
 
@@ -31,16 +32,25 @@ ui/
 │   │   ├── Loading.vue          # 加载卡片
 │   │   ├── Information.vue      # 服务器信息
 │   │   ├── Speedtest.vue        # 测速组件
+│   │   ├── Speedtest/           # 测速子组件
+│   │   │   ├── FileSpeedtest.vue
+│   │   │   └── Librespeed.vue
 │   │   ├── Utilities.vue        # 工具集合
 │   │   ├── TrafficDisplay.vue   # 流量显示
 │   │   ├── Copy.vue             # 复制按钮
+│   │   ├── __tests__/           # 组件测试
+│   │   │   ├── Copy.test.js
+│   │   │   └── Loading.test.js
 │   │   └── Utilities/           # 工具子组件
 │   │       ├── Ping.vue         # Ping 工具
 │   │       ├── IPerf3.vue       # iPerf3 工具
 │   │       ├── Shell.vue        # Shell 终端
 │   │       └── SpeedtestNet.vue # Speedtest.net
+│   ├── assets/
+│   │   └── base.css             # Tailwind v4 入口样式
 │   ├── config/
-│   │   └── lang.js              # 多语言配置
+│   │   ├── lang.js              # 多语言配置
+│   │   └── lang.test.js         # lang 单元测试
 │   ├── locales/                 # 翻译文件
 │   │   ├── zh-CN.json
 │   │   ├── en-US.json
@@ -51,15 +61,23 @@ ui/
 │   │   ├── ja-JP.json
 │   │   └── ko-KR.json
 │   ├── stores/
-│   │   └── app.js               # 全局状态
+│   │   ├── app.js               # 全局状态
+│   │   └── __tests__/
+│   │       └── app.test.js      # Pinia Store 单元测试
 │   ├── helper/
-│   │   └── unit.js              # 工具函数
+│   │   ├── unit.js              # 工具函数
+│   │   └── unit.test.js         # 工具函数单元测试
+│   ├── test-setup.js            # Vitest 全局设置 (i18n/EventSource/matchMedia mock)
 │   ├── App.vue                  # 根组件
 │   └── main.js                  # 入口文件
 ├── public/
 │   └── speedtest_worker.js      # 测速 Web Worker
+├── speedtest/                   # LibreSpeed 子模块 (独立)
 ├── package.json
-├── vite.config.js
+├── vite.config.js               # Vite 配置 (使用 vite.shared.js)
+├── vite.shared.js               # 共享 Vite 插件 (vue/tailwindcss/auto-import/components)
+├── vitest.config.js             # Vitest 配置
+├── eslint.config.js             # ESLint 10 flat config
 └── README.md
 ```
 
@@ -69,20 +87,27 @@ ui/
 ```json
 {
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.1",
     "pinia": "^3.0.4",
-    "vue": "^3.5.32"
+    "tailwindcss": "^4.3.1",
+    "vue": "^3.5.38"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.6",
+    "@vitejs/plugin-vue": "^6.0.7",
     "@xterm/xterm": "^6.0.0",
     "@xterm/addon-attach": "^0.12.0",
     "@xterm/addon-fit": "^0.11.0",
-    "apexcharts": "^5.10.6",
-    "axios": "^1.15.0",
+    "apexcharts": "^5.15.2",
+    "axios": "^1.18.0",
     "naive-ui": "^2.44.1",
-    "vue-i18n": "^11.3.2",
+    "vue-i18n": "^11.4.6",
     "vue3-apexcharts": "^1.11.1",
-    "vite": "^8.0.8"
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9",
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
+    "unplugin-auto-import": "^21.0.0",
+    "unplugin-vue-components": "^32.1.0"
   }
 }
 ```
@@ -91,85 +116,136 @@ ui/
 
 | 库 | 用途 | 版本 |
 |------|------|------|
-| Vue 3 | 核心框架 | 3.5.32+ |
+| Vue 3 | 核心框架 | 3.5.38+ |
 | Pinia | 状态管理 | 3.0.4+ |
-| Vite | 构建工具 | 8.0.8+ |
+| Vite | 构建工具 | 8.0.16+ |
+| Tailwind CSS | 样式框架 | 4.3.1+ |
+| @tailwindcss/vite | Tailwind Vite 插件 | 4.3.1+ |
 | Naive UI | UI 组件库 | 2.44.1+ |
-| Vue I18n | 国际化 | 11.3.2+ |
+| Vue I18n | 国际化 | 11.4.6+ |
 | Xterm.js | 终端模拟 | 6.0.0+ |
-| ApexCharts | 图表库 | 5.10.6+ |
-| Axios | HTTP 客户端 | 1.15.0+ |
+| ApexCharts | 图表库 | 5.15.2+ |
+| Axios | HTTP 客户端 | 1.18.0+ |
+| Vitest | 单元测试 | 4.1.9+ |
+| @vue/test-utils | Vue 组件测试 | 2.4.11+ |
 
 ## 3. 构建配置
 
 ### 3.1 Vite 配置
 
-**文件**: `ui/vite.config.js`
+**文件**: `ui/vite.config.js` (薄壳) + `ui/vite.shared.js` (共享插件栈)
 
+**`ui/vite.config.js`**:
+```javascript
+import { defineConfig } from 'vite'
+import { createSharedPlugins, resolveAlias } from './vite.shared.js'
+
+// https://vitejs.dev/config/
+export default defineConfig(({ command }) => {
+  return {
+    base: './',
+    server: {
+      proxy: {
+        '/session': {
+          target: 'http://127.0.0.1:8080',
+          ws: true
+        },
+        '/method': {
+          target: 'http://127.0.0.1:8080',
+          ws: true
+        }
+      }
+    },
+    resolve: {
+      alias: resolveAlias
+    },
+    plugins: createSharedPlugins({ command })
+  }
+})
+```
+
+**`ui/vite.shared.js`**:
 ```javascript
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vite'
+import fs from 'node:fs'
+import path from 'node:path'
 import vue from '@vitejs/plugin-vue'
-import vueJsx from '@vitejs/plugin-vue-jsx'
+import tailwindcss from '@tailwindcss/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 
-export default defineConfig({
-  plugins: [
+const projectRoot = fileURLToPath(new URL('.', import.meta.url))
+
+export const resolveAlias = {
+  '@': fileURLToPath(new URL('./src', import.meta.url))
+}
+
+export function createSharedPlugins({ command } = {}) {
+  const plugins = [
     vue(),
-    vueJsx(),
+    tailwindcss(),
     AutoImport({
       imports: [
         'vue',
         {
-          'naive-ui': [
-            'useDialog',
-            'useMessage',
-            'useNotification',
-            'useLoadingBar'
-          ]
+          'naive-ui': ['useDialog', 'useMessage', 'useNotification', 'useLoadingBar']
         }
       ]
-    }),
+    })
+  ]
+
+  // 构建时自动拷贝 speedtest_worker.js 到 dist
+  if (command) {
+    plugins.push({
+      name: 'build-script',
+      closeBundle() {
+        if (command !== 'build') return
+        const source = path.join(projectRoot, 'speedtest', 'speedtest_worker.js')
+        const dest = path.join(projectRoot, 'dist', 'speedtest_worker.js')
+        if (!fs.existsSync(source)) {
+          throw new Error(`[build-script] Missing source file: ${source}`)
+        }
+        fs.copyFileSync(source, dest)
+      }
+    })
+  }
+
+  plugins.push(
     Components({
       resolvers: [NaiveUiResolver()]
     })
-  ],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/session': 'http://localhost:80',
-      '/method': 'http://localhost:80',
-      '/assets': 'http://localhost:80'
-    }
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['vue', 'pinia', 'vue-i18n'],
-          ui: ['naive-ui', '@vicons/carbon'],
-          charts: ['apexcharts', 'vue3-apexcharts'],
-          terminal: ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-attach']
-        }
-      }
-    }
+  )
+
+  return plugins
+}
+```
+
+**`ui/vitest.config.js`**:
+```javascript
+import { defineConfig } from 'vitest/config'
+import { createSharedPlugins, resolveAlias } from './vite.shared.js'
+
+export default defineConfig({
+  plugins: createSharedPlugins(),
+  resolve: { alias: resolveAlias },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test-setup.js'],
+    exclude: ['speedtest/**', 'node_modules/**', 'dist/**']
   }
 })
 ```
 
 **配置说明**:
+- **共享插件**: `createSharedPlugins()` 在 Vite 与 Vitest 间复用同一套插件栈（vue/tailwindcss/auto-import/components）
 - **自动导入**: 自动导入 Vue 和 Naive UI API
 - **组件自动注册**: Naive UI 组件按需引入
 - **路径别名**: `@` 指向 `src` 目录
-- **开发代理**: 转发 API 请求到后端
-- **代码分割**: 优化加载性能
+- **开发代理**: 转发 API 请求到本地后端 (127.0.0.1:8080)
+- **构建产物自动拷贝**: `speedtest_worker.js` 在 `vite build` 时自动复制到 `dist/`，无需手动操作
+- **Vitest 环境**: jsdom + 全局 setup (i18n / EventSource / matchMedia mock)
 
 ### 3.2 开发模式
 
@@ -181,7 +257,7 @@ npm run dev
 
 **输出**:
 ```
-VITE v8.0.8  ready in 1234 ms
+VITE v8.0.16  ready in 1234 ms
 
 ➜  Local:   http://localhost:5173/
 ➜  Network: use --host to expose
@@ -207,12 +283,8 @@ dist/
 ├── index.html
 ├── assets/
 │   ├── index-[hash].js       # 主应用
-│   ├── vendor-[hash].js      # 第三方库
-│   ├── ui-[hash].js          # UI 组件
-│   ├── charts-[hash].js      # 图表库
-│   ├── terminal-[hash].js    # 终端组件
-│   └── [hash].css           # 样式
-└── speedtest_worker.js
+│   └── [hash].css           # 样式 (含 Tailwind v4)
+└── speedtest_worker.js      # 由 vite.shared.js 的 build-script 钩子自动拷贝
 ```
 
 **预览**:
@@ -1065,24 +1137,9 @@ const ShellComponent = defineAsyncComponent({
 
 ### 10.2 代码分割
 
-**Vite 配置**:
+当前未显式配置 `manualChunks`，由 Vite/Rollup 默认按需拆分。如需进一步优化加载性能，可在 `vite.config.js` 中加入 `build.rollupOptions.output.manualChunks`。
 
-```javascript
-build: {
-  rollupOptions: {
-    output: {
-      manualChunks: {
-        vendor: ['vue', 'pinia', 'vue-i18n'],
-        ui: ['naive-ui'],
-        charts: ['apexcharts'],
-        terminal: ['@xterm/xterm']
-      }
-    }
-  }
-}
-```
-
-**效果**:
+**优化方向**:
 - 分离第三方库
 - 并行加载
 - 缓存优化
@@ -1263,11 +1320,12 @@ npm run test:watch
 **问题 1**: 前端无法连接后端
 
 **解决**:
+检查 `ui/vite.config.js` 的 proxy 配置：
 ```javascript
-// 检查 vite.config.js 的 proxy 配置
 server: {
   proxy: {
-    '/session': 'http://localhost:80'
+    '/session': { target: 'http://127.0.0.1:8080', ws: true },
+    '/method':  { target: 'http://127.0.0.1:8080', ws: true }
   }
 }
 ```
