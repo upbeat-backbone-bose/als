@@ -71,8 +71,11 @@ jobs:
           go test -race -coverprofile=coverage.out -covermode=atomic ./...
           go tool cover -func=coverage.out | tee coverage.txt
           # Fail the job if total coverage drops below the agreed threshold.
+          # Threshold was raised from 15% -> 52% alongside the coverage
+          # push to 53.6% on 260623-fix-session-config-disclosure. Bump
+          # this number as new commits raise coverage further.
           total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%",""); print $3}')
-          awk -v t="$total" 'BEGIN { if (t+0 < 15) { printf "coverage %.2f%% below 15%% threshold\n", t; exit 1 } }'
+          awk -v t="$total" 'BEGIN { if (t+0 < 52) { printf "coverage %.2f%% below 52%% threshold\n", t; exit 1 } }'
         working-directory: ./backend
       - name: Upload coverage artifact
         if: always()
