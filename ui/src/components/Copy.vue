@@ -41,7 +41,7 @@ const handleUpdateShow = (show) => {
     <template #trigger>
       <div @click="copy(props.value)">
         <slot>
-          <n-icon style="margin-left: 5px">
+          <n-icon class="ml-1">
             <IconCopy />
           </n-icon>
         </slot>

@@ -1,6 +1,6 @@
 # 开发者指南
 
-**最后更新**: 2026-04-22
+**最后更新**: 2026-06-23
 
 ## 1. 开发环境搭建
 
@@ -179,10 +179,24 @@ npm run lint
 npm run format
 ```
 
+**单元测试**:
+```bash
+npm test
+```
+
+**测试监听模式**:
+```bash
+npm run test:watch
+```
+
 **构建测试**:
 ```bash
 npm run build
 ```
+
+**测试框架**: Vitest + @vue/test-utils + jsdom
+
+**测试覆盖**: 工具函数 (`helper/unit.test.js`)、语言配置 (`config/lang.test.js`)、Pinia Store (`stores/__tests__/app.test.js`)、Vue 组件 (`components/__tests__/`)
 
 ### 3.3 集成测试
 

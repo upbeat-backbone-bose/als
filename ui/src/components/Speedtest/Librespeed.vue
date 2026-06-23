@@ -223,9 +223,9 @@ watch(locale, () => {
     </n-grid>
   </div>
   <n-space justify="space-evenly">
-    <n-button size="large" @click="startOrStopSpeedtest" style="margin-top: 10px">
+    <n-button size="large" @click="startOrStopSpeedtest" class="mt-2.5">
       <template v-if="working">
-        <n-spin size="small" style="margin-right: 10px" />{{ $t('librespeed_stop') }}
+        <n-spin size="small" class="mr-2.5" />{{ $t('librespeed_stop') }}
       </template>
       <template v-else>{{ $t('librespeed_begin') }}</template>
     </n-button>

@@ -64,7 +64,7 @@ const ping = async () => {
       <n-button :type="working ? 'error' : 'primary'" ghost @click="working ? stopPing() : ping()">
         <template v-if="working"> {{ t('stop') }} </template>
         <template v-else> {{ t('tool_ping') }} </template>
-        <n-spin v-if="working" :size="16" style="margin-left: 5px"></n-spin>
+        <n-spin v-if="working" :size="16" class="ml-1"></n-spin>
       </n-button>
     </n-input-group>
     <n-table v-show="records.length > 0" :bordered="false" :single-line="false">

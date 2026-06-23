@@ -1,6 +1,6 @@
 # 系统架构
 
-**最后更新**: 2026-04-27
+**最后更新**: 2026-06-23
 
 ## 1. 系统概述
 
@@ -11,7 +11,7 @@ ALS (Another Looking-glass Server) 是一个轻量级的 Looking-glass 服务器
 ```
 ┌─────────────────────────────────────────────────┐
 │                 前端层 (UI)                       │
-│  Vue 3 + Vite + Naive UI + Vue I18n            │
+│  Vue 3 + Vite + Tailwind CSS + Naive UI + Vue I18n    │
 │  - 单页应用 (SPA)                               │
 │  - 多语言支持 (8 种语言)                           │
 │  - 响应式设计 (支持深色模式)                     │
@@ -49,11 +49,14 @@ ALS (Another Looking-glass Server) 是一个轻量级的 Looking-glass 服务器
 **技术栈**:
 - Vue 3 (Composition API)
 - Vite 构建工具
+- Tailwind CSS 样式框架
 - Naive UI 组件库
 - Pinia 状态管理
 - Vue I18n 国际化
 - Vue3-ApexCharts 图表
 - Xterm.js 终端模拟
+- Vitest 单元测试框架
+- VueUse 组合式工具库
 
 **目录结构** (`ui/`):
 ```
@@ -94,7 +97,7 @@ ui/
 ### 3.2 后端组件
 
 **技术栈**:
-- Go 1.26.2
+- Go 1.26.4
 - Gin Web Framework
 - Gorilla WebSocket
 - Cobra CLI

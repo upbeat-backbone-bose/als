@@ -127,7 +127,7 @@ onUnmounted(() => {
       <n-input
         :disabled="working"
         v-model:value="serverId"
-        :style="{ width: '90%' }"
+        :class="{ 'w-[90%]': true }"
         :placeholder="t('speedtest_net_server_id_placeholder')"
         @keyup.enter="speedtest"
       />
@@ -157,7 +157,7 @@ onUnmounted(() => {
         <a :href="speedtestData.result" target="_blank">
           <img
             :src="speedtestData.result + '.png'"
-            style="max-width: 300px; height: 100%; display: flex; margin: auto"
+            class="max-w-[300px] h-full flex mx-auto"
           />
         </a>
       </n-alert>
@@ -166,7 +166,7 @@ onUnmounted(() => {
       <n-collapse-transition :show="working">
         <p>
           {{ t(action) }} - {{ t('speedtest_net_progress') }}
-          <span style="float: right">{{ progress.sub }}%</span>
+          <span class="float-right">{{ progress.sub }}%</span>
         </p>
         <n-progress
           type="line"
@@ -176,7 +176,7 @@ onUnmounted(() => {
         />
         <p>
           {{ t('speedtest_net_total_progress') }}
-          <span style="float: right">{{ progress.full }}%</span>
+          <span class="float-right">{{ progress.full }}%</span>
         </p>
         <n-progress
           type="line"

@@ -8,10 +8,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src vite.config.js --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-pattern dist/** --ignore-pattern public/speedtest_worker.js",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.1",
     "pinia": "^3.0.4",
+    "tailwindcss": "^4.3.1",
     "vue": "^3.5.38"
   },
   "overrides": {
@@ -29,6 +33,8 @@
     "@vitejs/plugin-vue": "^6.0.7",
     "@vitejs/plugin-vue-jsx": "^5.1.5",
     "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/test-utils": "^2.4.11",
+    "@vueuse/core": "^14.3.0",
     "@xterm/addon-attach": "^0.12.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-serialize": "^0.14.0",
@@ -37,12 +43,15 @@
     "axios": "^1.18.0",
     "eslint": "^10.5.0",
     "eslint-plugin-vue": "^10.9.2",
+    "happy-dom": "^20.10.6",
+    "jsdom": "^29.1.1",
     "naive-ui": "^2.44.1",
     "prettier": "^3.8.4",
     "unplugin-auto-import": "^21.0.0",
     "unplugin-vue-components": "^32.1.0",
     "v-clipboard": "3.0.0-next.1",
     "vite": "^8.0.16",
+    "vitest": "^4.1.9",
     "vue-eslint-parser": "^10.4.1",
     "vue-i18n": "^11.4.6",
     "vue3-apexcharts": "^1.11.1",

@@ -2,7 +2,7 @@
 
 **模块路径**: `ui/`
 
-**最后更新**: 2026-04-22
+**最后更新**: 2026-06-23
 
 ## 1. 模块概述
 
@@ -11,11 +11,14 @@ ALS 前端是一个基于 Vue 3 的现代化单页应用 (SPA)，提供网络诊
 **核心特点**:
 - Vue 3 Composition API
 - Vite 构建工具
+- Tailwind CSS 样式框架
 - Naive UI 组件库
 - Vue I18n 国际化 (8 种语言)
 - Pinia 状态管理
 - Xterm.js 终端模拟
 - ApexCharts 图表
+- Vitest 单元测试
+- VueUse 组合式工具库
 - 自动深色模式
 
 ## 2. 项目结构
@@ -1101,7 +1104,21 @@ largeData.value = newData
 
 ## 11. 样式规范
 
-### 11.1 Scoped CSS
+### 11.1 Tailwind CSS
+
+项目使用 Tailwind CSS v4 作为样式框架，通过 Vite 插件集成。样式通过工具类直接在模板中声明，组件级样式使用 Tailwind 类代替内联样式。
+
+```vue
+<template>
+  <div class="mt-2.5 text-center">
+    <n-button class="min-w-[150px]">
+      {{ $t('start') }}
+    </n-button>
+  </div>
+</template>
+```
+
+### 11.2 Naive UI 组件样式
 
 ```vue
 <style scoped>
@@ -1210,7 +1227,28 @@ npm run build
 - 无 ESLint 警告
 - 产物完整
 
-### 13.2 手动测试清单
+### 13.2 单元测试
+
+**运行所有测试**:
+```bash
+npm test
+```
+
+**监听模式**:
+```bash
+npm run test:watch
+```
+
+**测试框架**: Vitest + @vue/test-utils + jsdom
+
+**测试文件**:
+- `src/helper/unit.test.js` — formatBytes 工具函数
+- `src/config/lang.test.js` — 多语言配置验证
+- `src/stores/__tests__/app.test.js` — Pinia Store 状态
+- `src/components/__tests__/Copy.test.js` — Copy 组件渲染
+- `src/components/__tests__/Loading.test.js` — Loading 组件渲染
+
+### 13.3 手动测试清单
 
 - [ ] 语言切换功能正常
 - [ ] 深色模式切换正常

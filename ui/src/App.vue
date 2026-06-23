@@ -67,7 +67,7 @@ onMounted(async () => {
         </template>
         <n-space justify="space-between">
           <div>
-            <div style="margin-top: 10px">
+            <div class="mt-2.5">
               {{ $t('powered_by') }}
               <n-button
                 text
@@ -86,7 +86,7 @@ onMounted(async () => {
             <n-select
               v-model:value="currentLangCode"
               :options="langDropdown"
-              style="min-width: 150px"
+              class="min-w-[150px]"
               @update:value="handleLangChange"
             />
           </div>

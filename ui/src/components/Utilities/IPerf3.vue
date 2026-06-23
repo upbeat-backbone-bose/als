@@ -65,7 +65,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <n-flex vertical style="height: 100%">
+  <n-flex vertical class="h-full">
     <n-button
       :block="true"
       :type="working ? 'error' : 'primary'"
@@ -77,7 +77,7 @@ onUnmounted(() => {
     </n-button>
     <n-progress
       v-show="timeout != 0"
-      style="transform: rotate(180deg)"
+      class="rotate-180"
       type="line"
       :percentage="100 - timeoutPercentage"
       :show-indicator="false"
@@ -98,6 +98,6 @@ onUnmounted(() => {
         </template>
       </n-space>
     </n-alert>
-    <div ref="terminalRef" style="flex-grow: 1" />
+    <div ref="terminalRef" class="grow" />
   </n-flex>
 </template>
