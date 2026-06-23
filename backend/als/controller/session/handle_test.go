@@ -226,6 +226,68 @@ func TestHandleStreamsCustomEvent(t *testing.T) {
 	}
 }
 
+// TestHandleExitsWhenChannelCloses covers the path where Handle
+// receives a zero-value message on its channel (channel closed)
+// and returns without writing further SSE events.
+func TestHandleExitsWhenChannelCloses(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stubConfigGetter(t, &config.ALSConfig{})
+
+	r := gin.New()
+	r.GET("/session", Handle)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bodyBuf := &threadSafeBuffer{}
+	w := &safeResponseRecorder{ResponseRecorder: httptest.NewRecorder(), buf: bodyBuf}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.ServeHTTP(w, reqWithCtx(ctx))
+	}()
+
+	// Wait for the session to be registered, then close its channel.
+	deadline := time.Now().Add(time.Second)
+	var session *client.ClientSession
+	for {
+		client.ClientsMu().RLock()
+		for _, s := range client.Clients {
+			if s != nil {
+				session = s
+				break
+			}
+		}
+		client.ClientsMu().RUnlock()
+		if session != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Handle did not register a session within 1s")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	close(session.Channel)
+
+	// Handle should observe the closed channel and return.
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Handle did not exit after channel close")
+	}
+
+	// SessionId and Config events must have been written before the
+	// exit; the body must contain them.
+	body := bodyBuf.String()
+	if !strings.Contains(body, "event:SessionId") {
+		t.Error("SessionId event missing")
+	}
+	if !strings.Contains(body, "event:Config") {
+		t.Error("Config event missing")
+	}
+}
+
 // threadSafeBuffer wraps bytes.Buffer with a mutex so the test thread
 // can snapshot the SSE response body while the handler goroutine
 // continues to write.
