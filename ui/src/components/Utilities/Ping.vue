@@ -81,7 +81,10 @@ const ping = async () => {
           <td>{{ record.seq }}</td>
           <td>{{ record.host }}</td>
           <td>{{ record.ttl }}</td>
-          <td>{{ record.latency.toFixed(2) }} ms</td>
+          <td>
+            <template v-if="record.latency !== '-'">{{ record.latency.toFixed(2) }} ms</template>
+            <template v-else>- ms</template>
+          </td>
         </tr>
       </tbody>
     </n-table>
