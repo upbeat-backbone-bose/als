@@ -35,12 +35,12 @@ git push origin master
 als/
 ├── docs/                          # 文档目录（提交到 git）
 │   ├── README.md                  # 文档首页
-│   ├── ARCHITECTURE.md            # 系统架构
-│   ├── INTERFACES.md              # 接口文档
-│   ├── DEVELOPER_GUIDE.md         # 开发者指南
+│   ├── architecture.md            # 系统架构
+│   ├── interfaces.md              # 接口文档
+│   ├── developer-guide.md         # 开发者指南
 │   ├── mkdocs.yml                 # MkDocs 配置（可选）
-│   ├── 专有概念/
-│   └── 模块/
+│   ├── backend.md / ui.md / config.md / fakeshell.md   # 模块文档
+│   └── session.md / feature-flags.md / fake-shell.md   # 概念文档
 └── .github/workflows/
     └── docs.yml                   # 自动部署工作流
 ```
@@ -49,7 +49,7 @@ als/
 
 ```bash
 # 编辑文档
-vim docs/ARCHITECTURE.md
+vim docs/architecture.md
 
 # 提交并推送
 git add docs/
@@ -75,4 +75,4 @@ mkdocs serve
 
 ---
 
-详细指南：[docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
+详细指南：[docs/deployment-guide.md](docs/deployment-guide.md)

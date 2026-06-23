@@ -3,7 +3,7 @@
 **模块路径**: `ui/`
 
 **最后更新**: 2026-06-23
-<!-- 同步自 ui/ 分支 260623-feat-tailwind-vitest-vueuse -->
+<!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json）-->
 
 ## 1. 模块概述
 
@@ -1410,6 +1410,6 @@ build: {
 
 ## 16. 相关文件
 
-- [系统架构](../ARCHITECTURE.md) - 前端在架构中的位置
-- [会话机制](../专有概念/会话机制.md) - 前端使用会话的方式
-- [接口文档](../INTERFACES.md) - 前端调用的 API
+- [系统架构](architecture.md) - 前端在架构中的位置
+- [会话机制](session.md) - 前端使用会话的方式
+- [接口文档](interfaces.md) - 前端调用的 API

@@ -5,7 +5,7 @@
 **文档版本**: 1.0
 
 **最后更新**: 2026-06-23
-<!-- 同步自 ui/ 分支 260623-feat-tailwind-vitest-vueuse -->
+<!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json）-->
 
 ## 快速导航
 
@@ -13,22 +13,22 @@
 
 | 文档 | 描述 |
 |------|------|
-| [系统架构](./ARCHITECTURE.md) | 系统整体架构、技术栈和组件说明 |
-| [接口文档](./INTERFACES.md) | API 接口规范和使用说明 |
-| [开发者指南](./DEVELOPER_GUIDE.md) | 开发环境搭建、构建和测试指南 |
+| [系统架构](./architecture.md) | 系统整体架构、技术栈和组件说明 |
+| [接口文档](./interfaces.md) | API 接口规范和使用说明 |
+| [开发者指南](./developer-guide.md) | 开发环境搭建、构建和测试指南 |
 
 ### 专有概念
 
-- [会话机制](./专有概念/会话机制.md) - 客户端会话管理机制
-- [功能开关](./专有概念/功能开关.md) - 基于环境变量的功能配置
-- [Fake Shell](./专有概念/控制台.md) - 限制性交互式控制台
+- [会话机制](./session.md) - 客户端会话管理机制
+- [功能开关](./feature-flags.md) - 基于环境变量的功能配置
+- [Fake Shell](./fake-shell.md) - 限制性交互式控制台
 
 ### 模块文档
 
-- [后端核心模块](./模块/backend.md) - Go 后端核心逻辑
-- [前端模块](./模块/ui.md) - Vue.js 前端界面
-- [配置模块](./模块/config.md) - 配置加载和管理
-- [FakeShell 模块](./模块/fakeshell.md) - 限制性 shell 实现
+- [后端核心模块](./backend.md) - Go 后端核心逻辑
+- [前端模块](./ui.md) - Vue.js 前端界面
+- [配置模块](./config.md) - 配置加载和管理
+- [FakeShell 模块](./fakeshell.md) - 限制性 shell 实现
 
 ## 项目概述
 
@@ -80,7 +80,7 @@ docker run -d --name looking-glass --restart always --network host ryachueng/loo
 ```
 
 **源码编译**:
-- 参考 [开发者指南](./DEVELOPER_GUIDE.md)
+- 参考 [开发者指南](./developer-guide.md)
 
 ## 资源链接
 

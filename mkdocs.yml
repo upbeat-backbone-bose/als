@@ -17,20 +17,19 @@ markdown_extensions:
   - pymdownx.superfences
 
 nav:
-  - "首页": README.md
-  - "文档索引": INDEX.md
+  - "首页": index.md
   - "核心文档":
-    - "系统架构": ARCHITECTURE.md
-    - "接口文档": INTERFACES.md
-    - "开发者指南": DEVELOPER_GUIDE.md
-    - "部署指南": DEPLOYMENT_GUIDE.md
-    - "Actions 保留策略": ACTIONS_RETENTION.md
+    - "系统架构": architecture.md
+    - "接口文档": interfaces.md
+    - "开发者指南": developer-guide.md
+    - "部署指南": deployment-guide.md
+    - "Actions 保留策略": actions-retention.md
   - "专有概念":
-    - "会话机制": 专有概念/会话机制.md
-    - "功能开关": 专有概念/功能开关.md
-    - "控制台": 专有概念/控制台.md
+    - "会话机制": session.md
+    - "功能开关": feature-flags.md
+    - "控制台": fake-shell.md
   - "模块文档":
-    - "后端核心": 模块/backend.md
-    - "前端模块": 模块/ui.md
-    - "配置模块": 模块/config.md
-    - "FakeShell": 模块/fakeshell.md
+    - "后端核心": backend.md
+    - "前端模块": ui.md
+    - "配置模块": config.md
+    - "FakeShell": fakeshell.md

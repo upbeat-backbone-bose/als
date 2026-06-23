@@ -1,7 +1,7 @@
 # 开发者指南
 
 **最后更新**: 2026-06-23
-<!-- 同步自 ui/ 分支 260623-feat-tailwind-vitest-vueuse -->
+<!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json / .github/workflows/ci.yml）-->
 
 ## 1. 开发环境搭建
 
@@ -102,28 +102,45 @@ cd backend && go run .
 
 ### 2.2 构建生产版本
 
-**完整构建流程**:
+**完整构建流程（本地手工构建）**:
 
 ```bash
-# 1. 构建前端 (vite build 完成后会自动把 speedtest/speedtest_worker.js 拷贝到 dist/)
+# 1. 构建前端
+#    - 输出 ui/dist/
+#    - vite.shared.js 的 build-script 插件会在 closeBundle 阶段
+#      把 speedtest/speedtest_worker.js 拷贝到 dist/speedtest_worker.js
 cd ui
-npm install
+npm ci
 npm run build
 
-# 2. 把前端构建物放到后端嵌入目录
-cp -r dist/* ../backend/embed/ui/
+# 2. 把整个前端构建物放入后端嵌入目录
+#    注意: vite build 不会自动完成这一步,本地必须手工 cp
+rm -rf ../backend/embed/ui
+mkdir -p ../backend/embed/ui
+cp -r dist/. ../backend/embed/ui/
 
-# 3. 构建后端 (Go embed 自动打包静态文件)
+# 3. 构建后端 (Go embed 编译期把 backend/embed/ui/ 打包进二进制)
 cd ../backend
 go build -o als
 ```
 
-**说明**:
-- 前端构建物输出到 `ui/dist/`
-- `vite.shared.js` 的 `build-script` 插件会在 `vite build` 时自动把 `speedtest/speedtest_worker.js` 复制到 `ui/dist/`
-- Go embed 会在编译时把 `backend/embed/ui/` 全部打包进二进制
+**构建行为契约（与代码一致）**:
 
-> ⚠️ 当前 `vite build` 不会自动把整个 `dist/` 复制到 `backend/embed/ui/`，这一步仍需手动执行（或通过 Docker 构建阶段 / CI 流程完成，参见 `.github/workflows/ci.yml` 的 `build-ui` → `download-artifact` → `embed/ui` 链路）。
+| 阶段 | 输入 | 输出 | 触发者 |
+|------|------|------|--------|
+| `npm run build` (UI) | `ui/src/` + `ui/public/` + `ui/speedtest/speedtest_worker.js` | `ui/dist/`（含 `dist/speedtest_worker.js`） | Vite + `vite.shared.js#build-script` |
+| `cp -r dist/. backend/embed/ui/` | `ui/dist/` | `backend/embed/ui/` | 本地手工 / CI 产物下载 |
+| `go build` | `backend/` 源码 + `backend/embed/ui/` | `backend/als`（单二进制，含前端静态资源） | Go `embed` 指令 |
+
+**CI 流程（与 `.github/workflows/ci.yml` 一致）**:
+
+CI 不走本地 `cp` 步骤,而是通过 artifact 在 job 间传递:
+
+1. `build-ui` job: `npm run build` → `actions/upload-artifact` 上传 `ui/dist` (name=`ui-dist`)
+2. `backend` job (depends on build-ui): `actions/download-artifact` 把 `ui-dist` 解压到 `backend/embed/ui`
+3. `backend` job 校验 `backend/embed/ui/index.html` 存在后跑 `go test` 与 `go build`
+
+Docker 镜像构建同理, 在多阶段构建中复用 `ui/dist` 而非重新调用 `vite build`。
 
 ### 2.3 交叉编译
 
@@ -406,7 +423,8 @@ als/
 - 翻译：语言代码.json (如 `zh-CN.json`)
 
 **文档**:
-- Markdown：大写 + 下划线 (如 `DEVELOPER_GUIDE.md`)
+- Markdown：kebab-case，全部小写、单词用连字符分隔 (如 `developer-guide.md`)
+- 例外：仓库根 `README.md` 保留大写以兼容 GitHub 自动渲染
 
 ### 7.3 提交规范
 

@@ -1,7 +1,7 @@
 # 系统架构
 
 **最后更新**: 2026-06-23
-<!-- 同步自 ui/ 分支 260623-feat-tailwind-vitest-vueuse -->
+<!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json）-->
 
 ## 1. 系统概述
 
