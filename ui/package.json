@@ -24,7 +24,8 @@
     "minimatch": "^10.2.5",
     "@eslint/eslintrc": {
       "minimatch": "^10.2.5"
-    }
+    },
+    "markdown-it": "14.2.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
