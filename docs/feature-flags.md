@@ -250,18 +250,34 @@ func SetupHttpRoute(e *gin.Engine) {
 
 ```javascript
 // backend/als/controller/session/session.go
-type sessionConfig struct {
-    config.ALSConfig
-    ClientIP string `json:"my_ip"`
+//
+// Handle builds a ClientConfig DTO (not the raw *ALSConfig) so that
+// internal fields such as listen_host/port and iperf3 port range are
+// never sent to the client.
+
+type ClientConfig struct {
+    ClientIP             string   `json:"my_ip"`
+    SpeedtestFileList    []string `json:"speedtest_files"`
+    SponsorMessage       string   `json:"sponsor_message"`
+    FeaturePing          bool     `json:"feature_ping"`
+    FeatureShell         bool     `json:"feature_shell"`
+    FeatureLibrespeed    bool     `json:"feature_librespeed"`
+    FeatureFileSpeedtest bool     `json:"feature_filespeedtest"`
+    FeatureSpeedtestDotNet bool   `json:"feature_speedtest_dot_net"`
+    FeatureIperf3        bool     `json:"feature_iperf3"`
+    FeatureMTR           bool     `json:"feature_mtr"`
+    FeatureTraceroute    bool     `json:"feature_traceroute"`
+    FeatureIfaceTraffic  bool     `json:"feature_iface_traffic"`
 }
 
 func Handle(c *gin.Context) {
-    _config := &sessionConfig{
-        ALSConfig: *config.Config,
-        ClientIP:  c.ClientIP(),
+    clientCfg := buildClientConfig(config.Config, c.ClientIP())
+    configJson, err := json.Marshal(clientCfg)
+    if err != nil {
+        log.Default().Printf("session: marshal client config failed: %v", err)
+        c.AbortWithStatus(http.StatusInternalServerError)
+        return
     }
-    
-    configJson, _ := json.Marshal(_config)
     c.SSEvent("Config", string(configJson))
 }
 ```

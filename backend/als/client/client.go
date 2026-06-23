@@ -13,28 +13,45 @@ var (
 	Clients   = make(map[string]*ClientSession)
 )
 
+// ClientsMu exposes the package-internal mutex to tests in other
+// packages that need to seed/inspect Clients without racing. Production
+// code should use the higher-level helpers (AddClient, GetClient,
+// RemoveExpiredClients, etc.) instead.
+func ClientsMu() *sync.RWMutex { return &clientsMu }
+
 type Message struct {
 	Name    string
 	Content string
 }
 
 type ClientSession struct {
-	Channel    chan *Message
-	ctx        context.Context
-	CreatedAt  time.Time
-	cancelFunc context.CancelFunc
+	Channel   chan *Message
+	ctx       context.Context
+	CreatedAt time.Time
 }
 
 func (c *ClientSession) SetContext(ctx context.Context) {
 	c.ctx = ctx
 }
 
+// GetContext returns a derived context that is cancelled when either
+// the parent context (requestCtx) or the session's parent context
+// (set via SetContext) is cancelled. Each call returns an independent
+// context with its own cancellation goroutine -- callers MUST defer
+// the returned cancel to release the goroutine promptly.
 func (c *ClientSession) GetContext(requestCtx context.Context) context.Context {
 	ctx, cancel := context.WithCancel(requestCtx)
-	c.cancelFunc = cancel
 	go func() {
+		// Local references: c.ctx may be reassigned by SetContext
+		// concurrently, so we capture the current parent here.
+		// (See the package doc on c.ctx for the threading model.)
+		parent := c.ctx
+		var parentDone <-chan struct{}
+		if parent != nil {
+			parentDone = parent.Done()
+		}
 		select {
-		case <-c.ctx.Done():
+		case <-parentDone:
 			cancel()
 		case <-ctx.Done():
 			cancel()
@@ -68,15 +85,21 @@ func GetClient(id string) (*ClientSession, bool) {
 	return session, ok
 }
 
+// RemoveClient deletes the session from the global map. It does NOT
+// cancel any in-flight contexts derived from this session -- the
+// caller that called GetContext owns the returned context and is
+// expected to defer its cancel. Forcing cancellation here would
+// cause goroutine leaks in the legitimate concurrent-call pattern
+// (ping and iperf3 both call GetContext multiple times per request).
 func RemoveClient(id string) {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
-	if client, ok := Clients[id]; ok && client.cancelFunc != nil {
-		client.cancelFunc()
-	}
 	delete(Clients, id)
 }
 
+// RemoveExpiredClients deletes sessions older than sessionExpireDuration
+// from the global map. As with RemoveClient, it does not cancel any
+// in-flight contexts -- the original callers own those.
 func RemoveExpiredClients() int {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
@@ -84,9 +107,6 @@ func RemoveExpiredClients() int {
 	removed := 0
 	for id, session := range Clients {
 		if session.CreatedAt.Before(expired) {
-			if session.cancelFunc != nil {
-				session.cancelFunc()
-			}
 			delete(Clients, id)
 			removed++
 		}

@@ -35,12 +35,16 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 	client.WaitQueue(ctx, func() {
 		pos, totalPos := client.GetQueuePositionByCtx(ctx)
 		msg, _ := json.Marshal(gin.H{"type": "queue", "pos": pos, "totalPos": totalPos})
-		if !closed.Load() {
-			clientSession.Channel <- &client.Message{
-				Name:    "SpeedtestStream",
-				Content: string(msg),
-			}
+		// Non-blocking send so this callback never pins the queue handler
+		// when the SSE consumer is slow or has disconnected. WaitQueue
+		// relies on cb returning promptly.
+		if closed.Load() {
+			return
 		}
+		client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
+			Name:    "SpeedtestStream",
+			Content: string(msg),
+		})
 	})
 	args := []string{"--accept-license", "-f", "jsonl"}
 	if nodeId != "" {
@@ -62,12 +66,15 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 			if err != nil {
 				return
 			}
-			if !closed.Load() {
-				clientSession.Channel <- &client.Message{
-					Name:    "SpeedtestStream",
-					Content: string(buf[:n]),
-				}
+			if closed.Load() {
+				return
 			}
+			// Non-blocking send so a slow consumer cannot block speedtest
+			// from finishing.
+			client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
+				Name:    "SpeedtestStream",
+				Content: string(buf[:n]),
+			})
 		}
 	}
 

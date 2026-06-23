@@ -18,20 +18,31 @@ import (
 	"github.com/samlm0/als/v2/als/client"
 )
 
+// checkOrigin is the policy applied to WebSocket upgrade requests.
+//
+// TODO(security) - Issue #1:
+//   https://github.com/upbeat-backbone-bose/als/issues
+// The current implementation accepts requests with an empty
+// Origin header and trusts the Host header for cross-origin comparison.
+// Both are exploitable (CSWSH and Host-header smuggling). This must be
+// replaced by an explicit allow-list before relying on it in production
+// over the public internet.
+func checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Host, r.Host)
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-		u, err := url.Parse(origin)
-		if err != nil {
-			return false
-		}
-		return strings.EqualFold(u.Host, r.Host)
-	},
+	CheckOrigin:     checkOrigin,
 }
 
 func HandleNewShell(c *gin.Context) {

@@ -297,16 +297,46 @@ func Handle(c *gin.Context) {
 
     c.Writer.Header().Set("Content-Type", "text/event-stream")
     c.Writer.Header().Set("Cache-Control", "no-cache")
+    c.Writer.Header().Set("Connection", "keep-alive")
     c.SSEvent("SessionId", uuid)
-    
-    _config := &sessionConfig{
-        ALSConfig: *config.Config,
-        ClientIP:  c.ClientIP(),
+
+    clientCfg := buildClientConfig(configGetter(), c.ClientIP())
+    configJson, err := json.Marshal(clientCfg)
+    if err != nil {
+        log.Default().Printf("session: marshal client config failed: %v", err)
+        c.AbortWithStatus(http.StatusInternalServerError)
+        return
     }
-    configJson, _ := json.Marshal(_config)
     c.SSEvent("Config", string(configJson))
-    
-    // 持续推送消息
+    c.Writer.Flush()
+
+    interfaceCacheJson, err := json.Marshal(timer.GetInterfaceCachesSnapshot())
+    if err != nil {
+        log.Default().Printf("session: marshal interface cache failed: %v", err)
+        c.AbortWithStatus(http.StatusInternalServerError)
+        return
+    }
+    c.SSEvent("InterfaceCache", string(interfaceCacheJson))
+    c.Writer.Flush()
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case msg, ok := <-channel:
+            if !ok {
+                return
+            }
+            c.SSEvent(msg.Name, msg.Content)
+            c.Writer.Flush()
+        }
+    }
+}
+```
+
+**安全要点**：`buildClientConfig` 只把 `*ALSConfig` 中客户端需要的字段（`feature_*`、`speedtest_files`、`sponsor_message`、`my_ip`）投影到 `ClientConfig` DTO，**不下发** `listen_host`/`listen_port`/`iperf3_*_port`/`public_ipv4`/`public_ipv6`/`location` 等服务端内部字段。
+
+`configGetter` 是测试注入点（生产中读 `config.Config`），便于端到端测试。
     for {
         select {
         case <-ctx.Done():
@@ -388,24 +418,34 @@ func Handle(c *gin.Context) {
    ```go
    func HandleFakeFile(c *gin.Context) {
        filename := c.Param("filename")
-       size := parseSize(filename)  // 解析 "1GB" -> 1073741824
-       
-       // 动态生成全零数据
+       // 校验格式 ^(\d+)(KB|MB|GB|TB)\.test$ + 白名单 + 非零大小
+       if !re.MatchString(filename) ||
+           !contains(config.Config.SpeedtestFileList, sizeLabel) ||
+           size <= 0 {
+           c.String(404, "404 file not found")
+           return
+       }
+       // 直接流式发送随机字节；不调用 WaitQueue（fakefile 无共享状态）
+       c.Header("Content-Length", strconv.FormatInt(size, 10))
        c.Stream(func(w io.Writer) bool {
-           _, err := w.Write(zeroBuff)
-           return err == nil
+           buf := make([]byte, 1024*1024)
+           rand.Read(buf)
+           // ... 分块写入 ...
+           return false
        })
    }
    ```
+   **注意**：`sizeToBytes` 拒绝 0（防止客户端测速除零）。该端点**不调用** `client.WaitQueue` —— 它没有跨协议状态，且对应路由下没有 queue handler 在跑。
 
 3. **LibreSpeed** (`librespeed.go`):
    ```go
    func HandleDownload(c *gin.Context) {
-       // 生成随机数据
-       randomData := generateRandomData()
-       c.Data(http.StatusOK, "application/octet-stream", randomData)
+       // 生成随机数据（默认 4 chunks × 1 MiB；ckSize 参数控制 chunk 数）
+       data := make([]byte, 1048576)
+       rand.Read(data)
+       for i := 0; i < chunks; i++ { c.Writer.Write(data) }
    }
-
+   
    func HandleUpload(c *gin.Context) {
        // 接收数据但不保存
        io.Copy(io.Discard, c.Request.Body)

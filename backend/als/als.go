@@ -1,6 +1,7 @@
 package als
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -8,6 +9,13 @@ import (
 	"github.com/samlm0/als/v2/als/timer"
 	"github.com/samlm0/als/v2/config"
 	alsHttp "github.com/samlm0/als/v2/http"
+)
+
+// Test-only injection points. nil means "use the production default".
+var (
+	cleanupContext   context.Context
+	cleanupInterval  time.Duration
+	newTickerForTest <-chan time.Time
 )
 
 func Init() {
@@ -22,18 +30,41 @@ func Init() {
 		go timer.SetupInterfaceBroadcast()
 	}
 	go timer.UpdateSystemResource()
-	go client.HandleQueue()
+	go client.HandleQueue(context.Background())
 	go cleanupExpiredClients()
 	aHttp.Start()
 }
 
+// cleanupExpiredClients polls every cleanupInterval (default 1h) and
+// removes any client sessions whose age exceeds the package-defined
+// expiry. It exits when ctx is cancelled.
+//
+// The interval and ticker factory are overridable in tests via
+// cleanupInterval / newTickerForTest.
 func cleanupExpiredClients() {
-	ticker := time.NewTicker(1 * time.Hour)
+	ctx := cleanupContext
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	interval := cleanupInterval
+	if interval == 0 {
+		interval = time.Hour
+	}
+	tickerC := newTickerForTest
+	if tickerC == nil {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		tickerC = t.C
+	}
 	for {
-		<-ticker.C
-		removed := client.RemoveExpiredClients()
-		if removed > 0 {
-			log.Default().Printf("Cleaned up %d expired sessions\n", removed)
+		select {
+		case <-ctx.Done():
+			return
+		case <-tickerC:
+			removed := client.RemoveExpiredClients()
+			if removed > 0 {
+				log.Default().Printf("Cleaned up %d expired sessions\n", removed)
+			}
 		}
 	}
 }
