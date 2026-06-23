@@ -8,12 +8,12 @@
 als/
 ├── docs/                      # GitHub Pages 文档目录
 │   ├── README.md              # 首页
-│   ├── ARCHITECTURE.md        # 系统架构
-│   ├── INTERFACES.md          # 接口文档
-│   ├── DEVELOPER_GUIDE.md     # 开发者指南
+│   ├── architecture.md        # 系统架构
+│   ├── interfaces.md          # 接口文档
+│   ├── developer-guide.md     # 开发者指南
 │   ├── mkdocs.yml             # MkDocs 配置（可选）
-│   ├── 专有概念/               # 概念文档
-│   └── 模块/                  # 模块文档
+│   ├── backend.md / ui.md / config.md / fakeshell.md   # 模块文档
+│   └── session.md / feature-flags.md / console.md   # 概念文档
 ├── .monkeycode/docs/          # 源文档目录
 └── .github/workflows/
     └── docs.yml               # GitHub Actions 工作流
@@ -80,7 +80,7 @@ https://upbeat-backbone-bose.github.io/als/
 
 ```bash
 # 1. 编辑文档
-vim docs/ARCHITECTURE.md
+vim docs/architecture.md
 
 # 2. 提交更改
 git add docs/
@@ -94,7 +94,7 @@ git push origin master
 
 ```bash
 # 1. 编辑源文档
-vim .monkeycode/docs/ARCHITECTURE.md
+vim .monkeycode/docs/architecture.md
 
 # 2. 同步到 docs 目录
 cp -r .monkeycode/docs/* docs/

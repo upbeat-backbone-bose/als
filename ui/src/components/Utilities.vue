@@ -111,7 +111,7 @@ const handleDrawClosed = () => {
     placement="right"
     @after-leave="handleDrawClosed"
   >
-    <n-drawer-content :title="toolComponentLabel" closable>
+    <n-drawer-content :title="toolComponentLabel" closable class="tool-drawer-content">
       <component :is="toolComponent" @closed="toolComponentShow = false" />
     </n-drawer-content>
   </n-drawer>

@@ -538,5 +538,5 @@ func GetActiveSessionCount() int {
 
 ## 11. 相关文档
 
-- [接口文档 - 会话管理](../INTERFACES.md)
-- [系统架构 - 会话管理机制](../ARCHITECTURE.md)
+- [接口文档 - 会话管理](interfaces.md)
+- [系统架构 - 会话管理机制](architecture.md)

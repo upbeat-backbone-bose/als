@@ -47,7 +47,7 @@ onMounted(() => {
     flushToTerminal()
   })
 
-  websocket.addEventListener('open', (event) => {
+  websocket.addEventListener('open', () => {
     window.addEventListener('resize', handleResize)
 
     handleResize()
@@ -73,11 +73,5 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="terminalRef" class="terminal" style="flex-grow: 1; height: 100%" />
+  <div ref="terminalRef" class="terminal grow h-full" />
 </template>
-
-<style>
-div:has(> div.terminal) {
-  padding: 0px !important;
-}
-</style>

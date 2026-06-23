@@ -233,15 +233,15 @@ onUnmounted(() => {
         <n-card :title="interfaceName">
           <n-grid x-gap="12" :cols="2">
             <n-gi>
-              <h3>{{ $t('server_bandwidth_graph_receive') }}</h3>
-              <span class="traffic-display">
+              <h3 class="text-center">{{ $t('server_bandwidth_graph_receive') }}</h3>
+              <span class="text-center block">
                 {{ formatBytes(interfaceData.traffic.receive, 2, true) }} /
                 {{ formatBytes(interfaceData.receive) }}
               </span>
             </n-gi>
             <n-gi>
-              <h3>{{ $t('server_bandwidth_graph_sended') }}</h3>
-              <span class="traffic-display">
+              <h3 class="text-center">{{ $t('server_bandwidth_graph_sended') }}</h3>
+              <span class="text-center block">
                 {{ formatBytes(interfaceData.traffic.send, 2, true) }} /
                 {{ formatBytes(interfaceData.send) }}
               </span>
@@ -255,17 +255,6 @@ onUnmounted(() => {
     </n-grid>
   </n-card>
 </template>
-
-<style scoped>
-h3 {
-  text-align: center;
-}
-
-.traffic-display {
-  text-align: center;
-  display: block;
-}
-</style>
 
 <style>
 .apexcharts-tooltip-title,

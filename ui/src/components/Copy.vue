@@ -15,7 +15,7 @@ const { t } = useI18n({ useScope: 'global' })
 const copy = async (value) => {
   try {
     await navigator.clipboard.writeText(value)
-  } catch (error) {
+  } catch {
     const textarea = document.createElement('textarea')
     document.body.appendChild(textarea)
     textarea.textContent = value
@@ -41,7 +41,7 @@ const handleUpdateShow = (show) => {
     <template #trigger>
       <div @click="copy(props.value)">
         <slot>
-          <n-icon style="margin-left: 5px">
+          <n-icon class="ml-1">
             <IconCopy />
           </n-icon>
         </slot>

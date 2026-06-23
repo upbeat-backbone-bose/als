@@ -7,7 +7,6 @@ node_modules/
 backend/embed/ui/
 ui/dist/
 ui/node_modules/
-backend/als
 *.exe
 *.dll
 *.so
@@ -41,3 +40,6 @@ backend/app/webspaces/speedtest-static/*
 ui/public/speedtest_worker.js
 ui/pnpm-lock.yaml
 tmp
+
+# mkdocs build output
+site/

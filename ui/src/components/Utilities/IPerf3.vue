@@ -13,8 +13,6 @@ const working = ref(false)
 const port = ref(0)
 const timeout = ref(0)
 const timeoutPercentage = ref(0)
-const timePass = ref(0)
-const timeoutTimer = ref()
 
 const terminal = new Terminal()
 const terminalRef = ref()
@@ -49,7 +47,7 @@ const startServer = async () => {
 
   try {
     await appStore.requestMethod('iperf3/server', {}, abortController.signal)
-  } catch (e) {}
+  } catch {}
 
   working.value = false
 }
@@ -65,7 +63,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <n-flex vertical style="height: 100%">
+  <n-flex vertical class="h-full">
     <n-button
       :block="true"
       :type="working ? 'error' : 'primary'"
@@ -77,7 +75,7 @@ onUnmounted(() => {
     </n-button>
     <n-progress
       v-show="timeout != 0"
-      style="transform: rotate(180deg)"
+      class="rotate-180"
       type="line"
       :percentage="100 - timeoutPercentage"
       :show-indicator="false"
@@ -98,6 +96,6 @@ onUnmounted(() => {
         </template>
       </n-space>
     </n-alert>
-    <div ref="terminalRef" style="flex-grow: 1" />
+    <div ref="terminalRef" class="grow" />
   </n-flex>
 </template>

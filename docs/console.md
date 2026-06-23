@@ -696,6 +696,6 @@ chmod u+s $(which ping)
 
 ## 13. 相关文档
 
-- [系统架构 - Shell 工具](../ARCHITECTURE.md)
-- [会话机制 - WebSocket Shell](./会话机制.md#session-usage-flow)
-- [接口文档 - WebSocket 协议](../INTERFACES.md)
+- [系统架构 - Shell 工具](architecture.md)
+- [会话机制 - WebSocket Shell](./session.md#session-usage-flow)
+- [接口文档 - WebSocket 协议](interfaces.md)

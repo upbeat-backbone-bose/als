@@ -422,7 +422,7 @@ func Handle(c *gin.Context) {
 - PTY 启动
 - 双向转发
 
-**详见**: [控制台.md](../专有概念/控制台.md)
+**详见**: [控制台](console.md)
 
 ## 5. 客户端子模块
 
@@ -849,4 +849,4 @@ wscat -c ws://localhost/session/<session-id>/shell
 
 - [config.md](./config.md) - 配置模块详解
 - [fakeshell.md](./fakeshell.md) - Fake Shell 详解
-- [会话机制](../专有概念/会话机制.md) - 核心概念
+- [会话机制](session.md) - 核心概念

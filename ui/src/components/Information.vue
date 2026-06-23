@@ -2,10 +2,8 @@
 import { useAppStore } from '@/stores/app'
 import Copyable from './Copy.vue'
 import Markdown from 'vue3-markdown-it'
-import { useI18n } from 'vue-i18n'
 
 const appStore = useAppStore()
-const { t } = useI18n({ useScope: 'global' })
 const configKeyMap = ref({
   location: 'server_location',
   my_ip: 'my_address',
@@ -20,7 +18,7 @@ const configKeyMap = ref({
     <n-grid x-gap="12" cols="1 s:2" responsive="screen" v-if="appStore.config">
       <template v-for="(index, key) in configKeyMap">
         <template v-if="appStore.config[key]">
-          <n-gi span="1" style="margin-bottom: 5px">
+          <n-gi span="1" class="mb-1">
             <n-card>
               <template #header> {{ $t(index) }} </template>
               <Copyable text :value="appStore.config[key]">{{ appStore.config[key] }}</Copyable>
@@ -30,17 +28,10 @@ const configKeyMap = ref({
       </template>
     </n-grid>
   </n-card>
-  <n-card v-if="appStore.config.sponsor_message.length > 0" hoverable style="margin-top: 10px">
+  <n-card v-if="appStore.config.sponsor_message.length > 0" hoverable class="mt-2.5">
     <template #header> {{ $t('sponsor_message') }} </template>
-    <div class="sponsor">
+    <div class="[&_a]:text-[#70c0e8] [&_a]:no-underline">
       <Markdown :source="appStore.config.sponsor_message" />
     </div>
   </n-card>
 </template>
-
-<style>
-.sponsor a {
-  color: #70c0e8;
-  text-decoration: none;
-}
-</style>

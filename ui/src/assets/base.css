@@ -1,6 +1,16 @@
+@layer theme, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
 #app {
     max-width: 1280px;
     margin: 0 auto;
     padding: 2rem;
     font-weight: normal;
+}
+
+@layer components {
+  .tool-drawer-content :where(.n-drawer-body-content-wrapper:has(> .terminal)) {
+    padding: 0 !important;
+  }
 }

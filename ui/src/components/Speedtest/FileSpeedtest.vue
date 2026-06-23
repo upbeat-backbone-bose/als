@@ -32,7 +32,7 @@ const url = ref(new URL(location.href))
   <template v-else>
     <n-space justify="space-evenly">
       <div v-if="appStore.config.public_ipv4">
-        <h3 style="text-align: center">{{ $t('file_ipv4_speedtest') }}</h3>
+        <h3 class="text-center">{{ $t('file_ipv4_speedtest') }}</h3>
         <n-space>
           <n-button
             strong
@@ -60,7 +60,7 @@ const url = ref(new URL(location.href))
       </div>
 
       <div v-if="appStore.config.public_ipv6">
-        <h3 style="text-align: center">{{ $t('file_ipv6_speedtest') }}</h3>
+        <h3 class="text-center">{{ $t('file_ipv6_speedtest') }}</h3>
         <n-space>
           <n-button
             strong

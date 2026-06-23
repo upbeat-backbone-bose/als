@@ -1,6 +1,7 @@
 # 系统架构
 
-**最后更新**: 2026-04-27
+**最后更新**: 2026-06-23
+<!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json）-->
 
 ## 1. 系统概述
 
@@ -11,7 +12,7 @@ ALS (Another Looking-glass Server) 是一个轻量级的 Looking-glass 服务器
 ```
 ┌─────────────────────────────────────────────────┐
 │                 前端层 (UI)                       │
-│  Vue 3 + Vite + Naive UI + Vue I18n            │
+│  Vue 3 + Vite + Tailwind CSS + Naive UI + Vue I18n    │
 │  - 单页应用 (SPA)                               │
 │  - 多语言支持 (8 种语言)                           │
 │  - 响应式设计 (支持深色模式)                     │
@@ -49,11 +50,13 @@ ALS (Another Looking-glass Server) 是一个轻量级的 Looking-glass 服务器
 **技术栈**:
 - Vue 3 (Composition API)
 - Vite 构建工具
+- Tailwind CSS 样式框架
 - Naive UI 组件库
 - Pinia 状态管理
 - Vue I18n 国际化
 - Vue3-ApexCharts 图表
 - Xterm.js 终端模拟
+- Vitest 单元测试框架
 
 **目录结构** (`ui/`):
 ```
@@ -65,22 +68,36 @@ ui/
 │   │   ├── Speedtest.vue   # 测速组件
 │   │   ├── Utilities.vue   # 工具集合组件
 │   │   ├── TrafficDisplay.vue  # 流量显示
+│   │   ├── __tests__/          # 组件测试 (Vitest)
+│   │   │   ├── Copy.test.js
+│   │   │   └── Loading.test.js
 │   │   └── Utilities/
 │   │       ├── Ping.vue    # Ping 工具
 │   │       ├── IPerf3.vue  # iPerf3 工具
 │   │       ├── Shell.vue   # Shell 终端
 │   │       └── SpeedtestNet.vue  # Speedtest.net
+│   ├── assets/
+│   │   └── base.css        # Tailwind v4 入口样式
 │   ├── config/
-│   │   └── lang.js         # 多语言配置
+│   │   ├── lang.js         # 多语言配置
+│   │   └── lang.test.js    # 多语言测试
 │   ├── locales/            # 翻译文件
 │   ├── stores/
-│   │   └── app.js          # 全局状态
+│   │   ├── app.js          # 全局状态
+│   │   └── __tests__/
+│   │       └── app.test.js # Pinia Store 测试
 │   ├── helper/
-│   │   └── unit.js         # 工具函数
+│   │   ├── unit.js         # 工具函数
+│   │   └── unit.test.js    # 工具函数测试
+│   ├── test-setup.js       # Vitest 全局 mock
 │   ├── App.vue             # 根组件
 │   └── main.js             # 入口文件
 ├── public/
 │   └── speedtest_worker.js # 测速 Web Worker
+├── vite.config.js          # Vite 入口 (薄壳)
+├── vite.shared.js          # 共享 Vite 插件栈 (vue/tailwindcss/auto-import)
+├── vitest.config.js        # Vitest 配置
+├── eslint.config.js        # ESLint 10 flat config
 └── package.json
 ```
 
@@ -94,7 +111,7 @@ ui/
 ### 3.2 后端组件
 
 **技术栈**:
-- Go 1.26.2
+- Go 1.26.4
 - Gin Web Framework
 - Gorilla WebSocket
 - Cobra CLI

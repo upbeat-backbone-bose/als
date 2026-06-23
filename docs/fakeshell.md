@@ -575,5 +575,5 @@ strace -f ./als --shell
 ## 15. 相关文件
 
 - [后端核心模块](./backend.md) - 模块调用关系
-- [控制台](../专有概念/控制台.md) - 详细实现和用户界面
-- [会话机制](../专有概念/会话机制.md) - WebSocket 集成
+- [控制台](console.md) - 详细实现和用户界面
+- [会话机制](session.md) - WebSocket 集成
