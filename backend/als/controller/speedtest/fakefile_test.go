@@ -20,9 +20,9 @@ func TestSizeToBytes(t *testing.T) {
 		{name: "1 GB", input: "1GB", want: 1024 * 1024 * 1024},
 		{name: "1 TB", input: "1TB", want: 1024 * 1024 * 1024 * 1024},
 
-		// Zero: regex permits \d+ so "0KB" is a valid (but degenerate) input
-		// returning 0. Callers must reject this before streaming.
-		{name: "0 KB returns zero", input: "0KB", want: 0},
+		// Zero is rejected: a 0-byte response would make downstream speed
+		// measurement divide by zero and Content-Length: 0 is meaningless.
+		{name: "0 KB rejected", input: "0KB", wantErr: true},
 
 		// Invalid formats
 		{name: "empty", input: "", wantErr: true},
@@ -39,11 +39,12 @@ func TestSizeToBytes(t *testing.T) {
 		{name: "leading garbage", input: "foo1MB", wantErr: true},
 		{name: "double unit", input: "1MBGB", wantErr: true},
 
-		// Overflow: int64 max is ~9.2e18. 1 PB would overflow on 64-bit.
-		// 9007199254740992 TB (= 8 PB) overflows int64; we only assert that
-		// the function does not panic and returns either an error or an
-		// overflowed value (callers must validate).
-		{name: "huge TB overflows", input: "9007199254740992TB", wantErr: false},
+// Overflow: int64 max is ~9.2e18. 9007199254740992 = 2^63; multiplied by
+// 2^40 it wraps to 0, which the new contract rejects. Inputs slightly
+// above 2^63 wrap to a small positive value (integer modular wrap);
+// out of scope for this fix -- the production allowlist
+// (config.SpeedtestFileList) is the primary defense.
+		{name: "TB wraps to zero rejected", input: "9007199254740992TB", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -121,9 +122,9 @@ func FuzzSizeToBytes(f *testing.F) {
 			}
 			return
 		}
-		// On success, the byte count must be non-negative.
-		if got < 0 {
-			t.Errorf("sizeToBytes(%q) = %d; want >= 0 on success", input, got)
+		// On success, the byte count must be strictly positive.
+		if got <= 0 {
+			t.Errorf("sizeToBytes(%q) = %d; want > 0 on success", input, got)
 		}
 	})
 }

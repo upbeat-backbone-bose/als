@@ -46,6 +46,13 @@ func sizeToBytes(size string) (int64, error) {
 		num *= 1024 * 1024 * 1024 * 1024
 	}
 
+	// Reject zero: the streaming handler emits Content-Length: 0 and the
+	// downstream speed measurement would divide by zero. 0KB.test is a
+	// degenerate request with no useful behavior.
+	if num <= 0 {
+		return 0, fmt.Errorf("size must be positive")
+	}
+
 	return num, nil
 }
 
