@@ -57,9 +57,9 @@ data: <uuid-string>
 ```
 event: Config
 data: {
-  "location": "服务器位置",
-  "public_ipv4": "1.2.3.4",
-  "public_ipv6": "2001:db8::1",
+  "my_ip": "客户端 IP",
+  "speedtest_files": ["1MB", "10MB", "100MB", "1GB"],
+  "sponsor_message": "赞助商信息",
   "feature_ping": true,
   "feature_shell": true,
   "feature_librespeed": true,
@@ -68,12 +68,11 @@ data: {
   "feature_iperf3": true,
   "feature_mtr": true,
   "feature_traceroute": true,
-  "feature_iface_traffic": true,
-  "speedtest_files": ["1MB", "10MB", "100MB", "1GB"],
-  "sponsor_message": "赞助商信息",
-  "my_ip": "客户端 IP"
+  "feature_iface_traffic": true
 }
 ```
+
+**字段裁剪说明**：`location`、`public_ipv4`、`public_ipv6` 这些服务端位置/网络信息**不再下发**给客户端（属于服务端内部信息，不应在任意持有 session id 的客户端上暴露）。同时也不会下发 `listen_host`、`listen_port`、`iperf3_start_port`、`iperf3_end_port` 这些运维端口范围。客户端需要的字段通过 `ClientConfig` DTO 投影后再下发。
 
 **事件 3 - InterfaceCache**:
 ```

@@ -169,10 +169,11 @@ cd backend
 go test ./...
 ```
 
-**覆盖度报告**:
+**race detector + 覆盖度**（CI 用的）：
 ```bash
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+go tool cover -func=coverage.out | tail -3
+# 应当 >= 52%（CI 阈值；2026-06-23 实测 ~53.6%）
 ```
 
 **特定包测试**:
@@ -221,6 +222,31 @@ cd ui/speedtest
 npm install
 npm run test:e2e
 ```
+
+### 3.4 后端关键设计原则（不可破坏）
+
+下列不变量在 2026-06-23 的 `260623-fix-session-config-disclosure` 分支中固化，违反任意一项都会让真实生产 bug 回归：
+
+**1. SSE `Config` 事件只下发 `ClientConfig` DTO**
+   `backend/als/controller/session/session.go::buildClientConfig` 把 `*ALSConfig` 中**客户端需要的字段**投影到 `ClientConfig`。**绝不可**直接把 `*ALSConfig` 嵌入序列化结构体——会泄露 `listen_host`/`listen_port`/`iperf3_*_port` 等内部运维信息给任意持有 session id 的客户端。
+
+**2. SSE channel 写必须非阻塞**
+   `backend/als/client/SafeChannelSend` 是发送 `*Message` 到 `ClientSession.Channel` 的**唯一入口**。该 channel 容量 64，**生产中 SSE 消费者可能慢或断开**——阻塞 send 会让 handler 卡住，进而让 queue handler 卡住，让所有后续测速请求排队，最终整个 server hang。CI 测试 `TestSafeChannelSendNeverBlocks` 锁定这一契约。
+
+**3. `HandleQueue` 是 ctx-cancellable**
+   `backend/als/client/queue.go::HandleQueue(ctx)` 必须接受 `context.Context`；outer-loop 在 `<-ctx.Done()` 时**先调 `shutdownQueue` 再 return**，让所有 parked `WaitQueue` 立即返回。生产中 graceful shutdown 依赖此契约（不依赖则 in-flight HTTP 请求会 hang 60s）。
+
+**4. `WaitQueue` 的 cb 不得阻塞**
+   cb 在 `HandleQueue` 的 inner-loop 同步调用；如果 cb 内部有阻塞操作（同步 send 到 channel、`time.Sleep`、网络调用），handler 永远无法响应 ctx.Done。**SafeChannelSend 是允许的**（不阻塞），裸 `channel <- msg` **不允许**。
+
+**5. `GetContext` 每次调用都返回独立 ctx + 独立 propagation goroutine**
+   `backend/als/client/client.go::GetContext` **不**在 `ClientSession` 上存 `cancelFunc` 字段（多次并发调用会互相覆盖，导致旧 goroutine 泄漏）。每个返回的 ctx 由 caller 负责 `defer cancel()`。`RemoveClient`/`RemoveExpiredClients` **不** force-cancel in-flight ctx。
+
+**6. `sizeToBytes` 拒绝非正数**
+   `backend/als/controller/speedtest/fakefile.go::sizeToBytes` 在乘以 `1024^n` 后必须返回 error 当 `num <= 0`，否则下游测速逻辑除零，HTTP 返回 0 字节 body。
+
+**7. `HandleFakeFile` 不调用 `WaitQueue`**
+   `backend/als/controller/speedtest/fakefile.go` 是流式文件测速，无跨协议状态，不应在 `client.WaitQueue` 上排队——该路由下没有任何 queue handler 在跑，WaitQueue 会永久阻塞。回归测试 `TestHandleFakeFileStreamsRandomBytes`。
 
 ## 4. Docker 开发
 
