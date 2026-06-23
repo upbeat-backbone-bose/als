@@ -42,7 +42,13 @@ func WaitQueue(ctx context.Context, cb func()) {
 		queueLock.Unlock()
 	}()
 
-	// Wake up HandleQueue so it can process the new entry
+	// Wake up HandleQueue so it can process the new entry.
+	//
+	// The send is non-blocking on purpose: if HandleQueue is parked inside
+	// a long-running notify callback, the new caller must not block here.
+	// HandleQueue's inner loop self-drains queueEntries until empty, so
+	// even a lost wakeup is fine -- the new entry will be picked up as
+	// soon as the previous callback returns.
 	select {
 	case queueWakeup <- struct{}{}:
 	default:
@@ -52,6 +58,19 @@ func WaitQueue(ctx context.Context, cb func()) {
 	select {
 	case <-queueCtx.Done():
 	case <-ctx.Done():
+	}
+}
+
+// shutdownQueue cancels every entry's queueCtx so parked WaitQueue calls
+// unblock immediately. Used during graceful shutdown to release callers
+// even if their parent ctx is still alive.
+func shutdownQueue() {
+	queueLock.Lock()
+	defer queueLock.Unlock()
+	for _, e := range queueEntries {
+		if e != nil && e.cancel != nil {
+			e.cancel()
+		}
 	}
 }
 
@@ -75,6 +94,7 @@ func HandleQueue(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			shutdownQueue()
 			return
 		case <-queueWakeup:
 		}
@@ -92,6 +112,7 @@ func HandleQueue(ctx context.Context) {
 			// Bail out promptly if cancellation arrives between entries.
 			select {
 			case <-ctx.Done():
+				shutdownQueue()
 				return
 			default:
 			}
@@ -118,8 +139,15 @@ func HandleQueue(ctx context.Context) {
 			head.cancel()
 
 			// Wait for the caller's task to finish (parent ctx done),
-			// so only one task runs at a time
-			<-head.ctx.Done()
+			// so only one task runs at a time. Also bail out promptly if
+			// our own ctx is cancelled so graceful shutdown is not blocked
+			// by a caller that hangs inside the notify callback.
+			select {
+			case <-head.ctx.Done():
+			case <-ctx.Done():
+				shutdownQueue()
+				return
+			}
 
 			// Clean up the head
 			queueLock.Lock()

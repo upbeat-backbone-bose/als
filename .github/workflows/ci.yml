@@ -60,8 +60,27 @@ jobs:
       - name: Verify UI files exist
         run: test -d backend/embed/ui && test -f backend/embed/ui/index.html
       - name: Test backend
-        run: go test ./...
+        run: |
+          set -euo pipefail
+          go vet ./...
+          go test -race -count=1 -timeout 120s ./...
         working-directory: ./backend
+      - name: Coverage
+        run: |
+          set -euo pipefail
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out | tee coverage.txt
+          # Fail the job if total coverage drops below the agreed threshold.
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%",""); print $3}')
+          awk -v t="$total" 'BEGIN { if (t+0 < 15) { printf "coverage %.2f%% below 15%% threshold\n", t; exit 1 } }'
+        working-directory: ./backend
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-coverage
+          path: backend/coverage.out
+          retention-days: 7
       - name: Build backend
         run: go build -v ./...
         working-directory: ./backend

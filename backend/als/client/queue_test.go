@@ -263,25 +263,75 @@ func TestWaitQueueReturnsWhenCallerCtxCancelled(t *testing.T) {
 
 func TestHandleQueueExitsOnCtxCancel(t *testing.T) {
 	resetQueueForTest(t)
+	_, stop := startHandler(t)
 
-	// Start a handler, give it a moment to settle, then cancel its ctx.
-	// The goroutine should exit within a short window even though it is
-	// parked in <-queueWakeup.
-	handlerCtx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
+	// No entries enqueued: the handler is parked in its outer
+	// <-queueWakeup select. Cancelling its ctx must let it exit
+	// within a short window.
+	stop()
+}
+
+// TestHandleQueueGracefulShutdownFromOuter verifies that cancelling
+// handler ctx while it is parked in the outer <-queueWakeup select
+// triggers shutdownQueue: every WaitQueue caller parked in the queue
+// returns within a short window even if their parent ctx is still alive.
+//
+// Note: there is intentionally no test for the in-flight-callback case
+// (handler parked inside head.notify() when ctx is cancelled). The notify
+// callback is invoked synchronously, so the handler cannot respond to
+// ctx.Done() while it is on the callback's call stack -- a fundamental
+// limitation of Go's synchronous call model. In production the callbacks
+// are short (e.g. sending an SSE event), so the handler is effectively
+// never blocked there for long. A future improvement would be to invoke
+// notify in a goroutine and bound its wait during shutdown.
+func TestHandleQueueGracefulShutdownFromOuter(t *testing.T) {
+	resetQueueForTest(t)
+	_, stop := startHandler(t)
+	defer stop()
+
+	// All callers park with non-blocking notifies (cb returns immediately)
+	// so the handler can move through them between ctx.Done checks.
+	var wg sync.WaitGroup
+	const parked = 3
+	for i := 0; i < parked; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			WaitQueue(context.Background(), nil)
+		}()
+	}
+
+	// Wait for at least one caller to be parked, so the handler is
+	// definitely inside its inner loop or between entries when we cancel.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		queueLock.Lock()
+		n := len(queueEntries)
+		queueLock.Unlock()
+		if n >= 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no callers parked within 2s")
+		}
+		runtime.Gosched()
+		time.Sleep(time.Millisecond)
+	}
+
+	// Cancel the handler. With non-blocking notifies, the handler is
+	// either in the outer select or between entries where the new
+	// ctx.Done checks fire.
+	stop()
+
+	wgDone := make(chan struct{})
 	go func() {
-		defer close(done)
-		HandleQueue(handlerCtx)
+		wg.Wait()
+		close(wgDone)
 	}()
-	runtime.Gosched()
-	time.Sleep(20 * time.Millisecond)
-
-	cancel()
-
 	select {
-	case <-done:
+	case <-wgDone:
 	case <-time.After(2 * time.Second):
-		t.Fatal("HandleQueue did not exit after ctx cancel")
+		t.Fatal("WaitQueue callers did not unblock after handler cancel")
 	}
 }
 
