@@ -40,3 +40,6 @@ backend/app/webspaces/speedtest-static/*
 ui/public/speedtest_worker.js
 ui/pnpm-lock.yaml
 tmp
+
+# mkdocs build output
+site/
