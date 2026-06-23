@@ -422,7 +422,7 @@ func Handle(c *gin.Context) {
 - PTY 启动
 - 双向转发
 
-**详见**: [控制台.md](fake-shell.md)
+**详见**: [控制台](console.md)
 
 ## 5. 客户端子模块
 

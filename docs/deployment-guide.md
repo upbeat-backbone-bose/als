@@ -13,7 +13,7 @@ als/
 │   ├── developer-guide.md     # 开发者指南
 │   ├── mkdocs.yml             # MkDocs 配置（可选）
 │   ├── backend.md / ui.md / config.md / fakeshell.md   # 模块文档
-│   └── session.md / feature-flags.md / fake-shell.md   # 概念文档
+│   └── session.md / feature-flags.md / console.md   # 概念文档
 ├── .monkeycode/docs/          # 源文档目录
 └── .github/workflows/
     └── docs.yml               # GitHub Actions 工作流

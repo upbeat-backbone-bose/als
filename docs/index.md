@@ -21,7 +21,7 @@
 
 - [会话机制](./session.md) - 客户端会话管理机制
 - [功能开关](./feature-flags.md) - 基于环境变量的功能配置
-- [Fake Shell](./fake-shell.md) - 限制性交互式控制台
+- [Fake Shell](./console.md) - 限制性交互式控制台
 
 ### 模块文档
 

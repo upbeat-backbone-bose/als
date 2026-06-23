@@ -27,7 +27,7 @@ nav:
   - "专有概念":
     - "会话机制": session.md
     - "功能开关": feature-flags.md
-    - "控制台": fake-shell.md
+    - "控制台": console.md
   - "模块文档":
     - "后端核心": backend.md
     - "前端模块": ui.md
