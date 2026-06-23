@@ -1,18 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-
-// Mock axios BEFORE importing the store. vi.mock is hoisted, but we
-// still define the mock factory first so it's available at module load.
-const mockGet = vi.fn()
-const mockAxiosInstance = { get: mockGet }
-
-vi.mock('axios', () => ({
-  default: {
-    create: vi.fn(() => mockAxiosInstance)
-  }
-}))
-
+import axios from 'axios'
 import { useAppStore } from '@/stores/app'
+
+// The test-setup.js axios mock exports __mockGet / __mockCreate handles on
+// the default export so tests can configure behavior per case.
+const { __mockGet: mockGet, __mockCreate: mockCreate } = axios
 
 describe('useAppStore', () => {
   let consoleLogSpy
@@ -22,6 +15,7 @@ describe('useAppStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockGet.mockReset()
+    mockCreate.mockClear()
     // silence noisy expected console output
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -37,7 +31,7 @@ describe('useAppStore', () => {
     vi.useRealTimers()
   })
 
-  // ---------- Initialization (existing) ----------
+  // ---------- Initialization ----------
 
   it('initializes with connecting as true', () => {
     const store = useAppStore()
@@ -67,7 +61,6 @@ describe('useAppStore', () => {
   // ---------- EventSource wiring ----------
 
   it('creates an EventSource on store init', () => {
-    // store creation already triggered setupEventSource() in app.js
     const store = useAppStore()
     expect(store.source).toBeDefined()
     expect(store.source).toBeInstanceOf(global.EventSource)
@@ -101,23 +94,74 @@ describe('useAppStore', () => {
     expect(store.memoryUsage).toBe('1 KB')
   })
 
+  // ---------- EventSource edge cases ----------
+
+  it('keeps the latest SessionId value on repeated events', () => {
+    const store = useAppStore()
+    store.source.dispatchEvent('SessionId', 'first')
+    store.source.dispatchEvent('SessionId', 'second')
+    store.source.dispatchEvent('SessionId', 'third')
+    expect(store.sessionId).toBe('third')
+  })
+
+  it('connects to the relative ./session URL', () => {
+    // The store should construct the EventSource with a relative path so it
+    // rides the same host as the SPA. This protects against accidental
+    // hard-coded absolute URLs that would break reverse-proxy deployments.
+    const store = useAppStore()
+    expect(store.source.url).toBe('./session')
+  })
+
+  it('does not throw when Config payload is invalid JSON', () => {
+    // app.js calls JSON.parse(e.data) without try/catch. Document the actual
+    // behavior: a malformed Config crashes the listener invocation. The
+    // store remains alive; the next event still updates state. This test
+    // guards against a silent regression to silent swallowing.
+    const store = useAppStore()
+    expect(() => store.source.dispatchEvent('Config', '{not json')).toThrow()
+    // subsequent valid Config still works
+    store.source.dispatchEvent('Config', JSON.stringify({ public_ipv4: '5.6.7.8' }))
+    expect(store.config).toEqual({ public_ipv4: '5.6.7.8' })
+  })
+
+  it('toggles connecting back to true on Config after it was cleared', () => {
+    // Config first clears connecting. If a fresh Config event arrives later
+    // (e.g. server pushes a config update), the listener does not flip
+    // connecting — it stays false. Document that as the current contract.
+    const store = useAppStore()
+    store.source.dispatchEvent('Config', JSON.stringify({ a: 1 }))
+    expect(store.connecting).toBe(false)
+    store.source.dispatchEvent('Config', JSON.stringify({ a: 2 }))
+    expect(store.connecting).toBe(false)
+    expect(store.config).toEqual({ a: 2 })
+  })
+
   // ---------- reconnectEventSource (1s timer) ----------
 
   it('reconnects 1s after onerror', () => {
     vi.useFakeTimers()
     const store = useAppStore()
     const first = store.source
-    // trigger SSE error → store calls close + reconnectEventSource
     first.triggerError()
-    expect(first.readyState).toBe(2) // closed
+    expect(first.readyState).toBe(2)
     expect(store.connecting).toBe(true)
-    // before the timer fires, source is still the old one
     expect(store.source).toBe(first)
-    // advance 1 second
     vi.advanceTimersByTime(1000)
-    // a fresh EventSource is created and assigned
     expect(store.source).not.toBe(first)
     expect(store.source).toBeInstanceOf(global.EventSource)
+  })
+
+  it('the reconnect creates a fresh EventSource with all three listeners re-registered', () => {
+    vi.useFakeTimers()
+    const store = useAppStore()
+    const first = store.source
+    first.triggerError()
+    vi.advanceTimersByTime(1000)
+    // new source, same wiring
+    expect(store.source).not.toBe(first)
+    expect(store.source._listeners['SessionId']).toBeDefined()
+    expect(store.source._listeners['Config']).toBeDefined()
+    expect(store.source._listeners['MemoryUsage']).toBeDefined()
   })
 
   // ---------- requestMethod ----------
@@ -128,7 +172,6 @@ describe('useAppStore', () => {
     store.sessionId = 'sess-1'
     const result = await store.requestMethod('ping', { ip: '8.8.8.8' })
     expect(result).toEqual({ success: true, result: 42 })
-    // axios.create is called once per request
     expect(mockGet).toHaveBeenCalledTimes(1)
     expect(mockGet).toHaveBeenCalledWith('./method/ping', { params: { ip: '8.8.8.8' } })
   })
@@ -138,20 +181,25 @@ describe('useAppStore', () => {
     const store = useAppStore()
     const ac = new AbortController()
     await store.requestMethod('iperf3/server', {}, ac.signal)
-    // axios.create was called with the signal
-    const axios = (await import('axios')).default
-    expect(axios.create).toHaveBeenCalledWith(
-      expect.objectContaining({ signal: ac.signal })
-    )
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ signal: ac.signal }))
   })
 
   it('requestMethod omits signal when not provided', async () => {
     mockGet.mockResolvedValue({ data: { success: true } })
     const store = useAppStore()
     await store.requestMethod('ping', {})
-    const axios = (await import('axios')).default
-    expect(axios.create).toHaveBeenCalledWith(
+    expect(mockCreate).toHaveBeenCalledWith(
       expect.not.objectContaining({ signal: expect.anything() })
+    )
+  })
+
+  it('requestMethod attaches the current sessionId as a header', async () => {
+    mockGet.mockResolvedValue({ data: { success: true } })
+    const store = useAppStore()
+    store.sessionId = 'sess-xyz'
+    await store.requestMethod('ping', {})
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: expect.objectContaining({ session: 'sess-xyz' }) })
     )
   })
 
@@ -159,7 +207,6 @@ describe('useAppStore', () => {
     const resp = { data: { success: false, error: 'no' } }
     mockGet.mockResolvedValue(resp)
     const store = useAppStore()
-    // The store rejects with the whole axios response object (not response.data)
     await expect(store.requestMethod('ping')).rejects.toBe(resp)
   })
 
