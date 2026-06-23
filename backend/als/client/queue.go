@@ -55,7 +55,7 @@ func WaitQueue(ctx context.Context, cb func()) {
 	}
 }
 
-func GetQueuePostitionByCtx(ctx context.Context) (int, int) {
+func GetQueuePositionByCtx(ctx context.Context) (int, int) {
 	queueLock.Lock()
 	defer queueLock.Unlock()
 
