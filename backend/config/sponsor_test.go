@@ -9,6 +9,17 @@ import (
 	"testing"
 )
 
+func TestLoadWebConfigSkippedDueToGoroutine(t *testing.T) {
+	// LoadWebConfig spawns a goroutine that calls updatePublicIP and
+	// updateLocation when both PublicIPv4 and PublicIPv6 are empty.
+	// Both functions depend on real DNS/HTTP and would race with
+	// test cleanup. Until LoadWebConfig is refactored to expose an
+	// injection point for the IP-lookup client, the only testable
+	// surface -- the iperf3 binary presence check -- cannot be
+	// exercised in isolation.
+	t.Skip("LoadWebConfig spawns an IP-lookup goroutine that races with cleanup; needs refactor")
+}
+
 func TestLoadSponsorMessageEmpty(t *testing.T) {
 	// Empty SponsorMessage: function must return immediately without
 	// touching anything.
