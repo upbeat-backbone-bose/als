@@ -55,6 +55,9 @@ func buildClientConfig(cfg *config.ALSConfig, clientIP string) ClientConfig {
 	}
 }
 
+// configGetter is overridable in tests; production reads config.Config directly.
+var configGetter = func() *config.ALSConfig { return config.Config }
+
 func Handle(c *gin.Context) {
 	uuid := uuid.New().String()
 	channel := make(chan *client.Message, 64)
@@ -75,7 +78,7 @@ func Handle(c *gin.Context) {
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.SSEvent("SessionId", uuid)
 
-	clientCfg := buildClientConfig(config.Config, c.ClientIP())
+	clientCfg := buildClientConfig(configGetter(), c.ClientIP())
 	configJson, err := json.Marshal(clientCfg)
 	if err != nil {
 		log.Default().Printf("session: marshal client config failed: %v", err)
