@@ -15,27 +15,6 @@ import (
 	"github.com/samlm0/als/v2/config"
 )
 
-// safeChannelSend writes msg to ch without blocking. Returns true on
-// success, false if the channel was full or ctx is cancelled. Mirrors
-// the helper in als/controller/speedtest so both controllers share
-// the same "drop on slow consumer" behaviour.
-func safeChannelSend(ctx context.Context, ch chan<- *client.Message, msg *client.Message) bool {
-	if ch == nil {
-		return false
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	select {
-	case ch <- msg:
-		return true
-	case <-ctx.Done():
-		return false
-	default:
-		return false
-	}
-}
-
 func randomPort(min, max int) (int, error) {
 	if max < min {
 		return 0, fmt.Errorf("invalid port range")
@@ -65,7 +44,7 @@ func Handle(c *gin.Context) {
 	// Send the assigned port to the client. Use non-blocking send so a
 	// disconnected/slow SSE consumer cannot prevent the iperf3 server
 	// from starting.
-	if !safeChannelSend(ctx, clientSession.Channel, &client.Message{
+	if !client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
 		Name:    "Iperf3",
 		Content: strconv.Itoa(port),
 	}) && ctx.Err() != nil {
@@ -88,7 +67,7 @@ func Handle(c *gin.Context) {
 			}
 			// Non-blocking send so a slow consumer cannot block iperf3
 			// from completing.
-			if !safeChannelSend(ctx, clientSession.Channel, msg) {
+			if !client.SafeChannelSend(ctx, clientSession.Channel, msg) {
 				if ctx.Err() != nil {
 					return
 				}

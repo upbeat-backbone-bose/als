@@ -13,32 +13,6 @@ import (
 	"github.com/samlm0/als/v2/als/client"
 )
 
-// safeChannelSend writes msg to ch without blocking. Returns true on
-// success, false if the channel was full. ctx is checked so callers
-// that want to abort on shutdown can pass a cancellable ctx.
-//
-// This exists to keep the WaitQueue notify callbacks (and writer
-// goroutines) from pinning the queue handler when the SSE consumer is
-// slow or has disconnected. A full channel is treated as "consumer
-// not keeping up": the message is dropped rather than blocking the
-// queue.
-func safeChannelSend(ctx context.Context, ch chan<- *client.Message, msg *client.Message) bool {
-	if ch == nil {
-		return false
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	select {
-	case ch <- msg:
-		return true
-	case <-ctx.Done():
-		return false
-	default:
-		return false
-	}
-}
-
 func HandleSpeedtestDotNet(c *gin.Context) {
 	nodeId, ok := c.GetQuery("node_id")
 	v, _ := c.Get("clientSession")
@@ -67,7 +41,7 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 		if closed.Load() {
 			return
 		}
-		safeChannelSend(ctx, clientSession.Channel, &client.Message{
+		client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
 			Name:    "SpeedtestStream",
 			Content: string(msg),
 		})
@@ -97,7 +71,7 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 			}
 			// Non-blocking send so a slow consumer cannot block speedtest
 			// from finishing.
-			safeChannelSend(ctx, clientSession.Channel, &client.Message{
+			client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
 				Name:    "SpeedtestStream",
 				Content: string(buf[:n]),
 			})
