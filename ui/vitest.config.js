@@ -1,31 +1,10 @@
-import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vitest/config'
-import vue from '@vitejs/plugin-vue'
-import tailwindcss from '@tailwindcss/vite'
-import AutoImport from 'unplugin-auto-import/vite'
-import Components from 'unplugin-vue-components/vite'
-import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
+import { createSharedPlugins, resolveAlias } from './vite.shared.js'
 
 export default defineConfig({
-  plugins: [
-    vue(),
-    tailwindcss(),
-    AutoImport({
-      imports: [
-        'vue',
-        {
-          'naive-ui': ['useDialog', 'useMessage', 'useNotification', 'useLoadingBar']
-        }
-      ]
-    }),
-    Components({
-      resolvers: [NaiveUiResolver()]
-    })
-  ],
+  plugins: createSharedPlugins(),
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+    alias: resolveAlias
   },
   test: {
     environment: 'jsdom',

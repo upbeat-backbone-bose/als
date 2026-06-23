@@ -56,7 +56,6 @@ ALS (Another Looking-glass Server) 是一个轻量级的 Looking-glass 服务器
 - Vue3-ApexCharts 图表
 - Xterm.js 终端模拟
 - Vitest 单元测试框架
-- VueUse 组合式工具库
 
 **目录结构** (`ui/`):
 ```

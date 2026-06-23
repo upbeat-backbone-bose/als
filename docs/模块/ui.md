@@ -18,7 +18,6 @@ ALS 前端是一个基于 Vue 3 的现代化单页应用 (SPA)，提供网络诊
 - Xterm.js 终端模拟
 - ApexCharts 图表
 - Vitest 单元测试
-- VueUse 组合式工具库
 - 自动深色模式
 
 ## 2. 项目结构

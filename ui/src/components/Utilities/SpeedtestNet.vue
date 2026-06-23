@@ -127,7 +127,7 @@ onUnmounted(() => {
       <n-input
         :disabled="working"
         v-model:value="serverId"
-        :class="{ 'w-[90%]': true }"
+        class="w-[90%]"
         :placeholder="t('speedtest_net_server_id_placeholder')"
         @keyup.enter="speedtest"
       />
