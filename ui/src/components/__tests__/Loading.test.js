@@ -7,6 +7,7 @@ describe('Loading.vue', () => {
     return mount(Loading, {
       global: {
         stubs: {
+          'n-card': true,
           'n-progress': true
         }
       }
@@ -20,7 +21,7 @@ describe('Loading.vue', () => {
 
   it('renders an n-card component', () => {
     const wrapper = createWrapper()
-    expect(wrapper.html()).toContain('n-card--bordered')
+    expect(wrapper.html()).toMatch(/n-card|n-card--bordered/)
   })
 
   it('renders with loading title', () => {

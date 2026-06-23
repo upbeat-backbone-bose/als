@@ -1,16 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
 
+const { useMessageMock } = vi.hoisted(() => ({
+  useMessageMock: vi.fn(() => ({
+    info: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+    loading: vi.fn()
+  }))
+}))
+
 vi.mock('naive-ui', async (importOriginal) => {
   const original = await importOriginal()
   return {
     ...original,
-    useMessage: vi.fn(() => ({
-      info: vi.fn(),
-      success: vi.fn(),
-      warning: vi.fn(),
-      error: vi.fn(),
-      loading: vi.fn()
-    }))
+    useMessage: useMessageMock
   }
 })
 
