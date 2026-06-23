@@ -87,5 +87,44 @@ func TestHandleQueueFIFO(t *testing.T) {
 }
 
 func TestGetQueuePosition(t *testing.T) {
-	t.Skip("position check not stable with global handler goroutine")
+	resetQueueForTest()
+
+	// empty queue
+	if pos, total := GetQueuePositionByCtx(context.Background()); pos != 0 || total != 0 {
+		t.Errorf("empty queue: got (%d, %d); want (0, 0)", pos, total)
+	}
+
+	// Seed two entries with two distinct ctxs, look up by ctx pointer.
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+
+	// Enqueue directly (bypass WaitQueue to avoid blocking).
+	queueLock.Lock()
+	queueEntries = append(queueEntries,
+		&queueEntry{ctx: ctx1},
+		&queueEntry{ctx: ctx2},
+	)
+	queueLock.Unlock()
+
+	tests := []struct {
+		name      string
+		ctx       context.Context
+		wantPos   int
+		wantTotal int
+	}{
+		{"first entry", ctx1, 1, 2},
+		{"second entry", ctx2, 2, 2},
+		{"unknown ctx returns zeros", context.Background(), 0, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pos, total := GetQueuePositionByCtx(tt.ctx)
+			if pos != tt.wantPos || total != tt.wantTotal {
+				t.Errorf("got (%d, %d); want (%d, %d)", pos, total, tt.wantPos, tt.wantTotal)
+			}
+		})
+	}
 }
