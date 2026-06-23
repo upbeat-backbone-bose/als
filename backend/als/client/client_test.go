@@ -1,7 +1,6 @@
 package client
 
 import (
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -10,11 +9,6 @@ import (
 // subtest; tests run sequentially so this is safe.
 func clearClients() {
 	clientsMu.Lock()
-	for _, s := range Clients {
-		if s != nil && s.cancelFunc != nil {
-			s.cancelFunc()
-		}
-	}
 	Clients = make(map[string]*ClientSession)
 	clientsMu.Unlock()
 }
@@ -91,19 +85,21 @@ func TestRemoveExpiredClients(t *testing.T) {
 }
 
 func TestRemoveExpiredClientsInvokesCancel(t *testing.T) {
+	// RemoveExpiredClients no longer forces cancellation of in-flight
+	// contexts -- the caller that called GetContext owns the cancel.
+	// The session is simply removed from the map.
 	clearClients()
 
-	var cancelled atomic.Int32
 	Clients["expired"] = &ClientSession{
-		Channel:    make(chan *Message, 1),
-		CreatedAt:  time.Now().Add(-25 * time.Hour),
-		cancelFunc: func() { cancelled.Add(1) },
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now().Add(-25 * time.Hour),
 	}
 
-	RemoveExpiredClients()
-
-	if cancelled.Load() != 1 {
-		t.Errorf("cancelFunc invoked %d times; want 1", cancelled.Load())
+	if removed := RemoveExpiredClients(); removed != 1 {
+		t.Errorf("removed = %d; want 1", removed)
+	}
+	if _, ok := Clients["expired"]; ok {
+		t.Error("expired session still in Clients after RemoveExpiredClients")
 	}
 }
 

@@ -28,19 +28,16 @@ func TestAddAndGetClient(t *testing.T) {
 	}
 }
 
+// TestRemoveClientRemovesFromMap verifies that RemoveClient deletes
+// the session from the global map. It no longer invokes any per-
+// session cancel function (see TestGetContextDoesNotLeak for the
+// goroutine-leak fix).
 func TestRemoveClient(t *testing.T) {
 	resetClientMap()
 
-	cancelCalled := make(chan struct{}, 1)
 	session := &ClientSession{
 		Channel:   make(chan *Message, 1),
 		CreatedAt: time.Now(),
-		cancelFunc: func() {
-			select {
-			case cancelCalled <- struct{}{}:
-			default:
-			}
-		},
 	}
 	AddClient("to-remove", session)
 
@@ -49,11 +46,121 @@ func TestRemoveClient(t *testing.T) {
 	if _, ok := GetClient("to-remove"); ok {
 		t.Error("GetClient returned true after RemoveClient")
 	}
-	select {
-	case <-cancelCalled:
-	case <-time.After(time.Second):
-		t.Error("RemoveClient did not invoke cancelFunc")
+}
+
+// TestRemoveClientDoesNotCancelInflightContexts verifies the new
+// contract: RemoveClient only removes the session from the global
+// map; in-flight contexts derived from the session remain live. The
+// caller that called GetContext owns the cancel.
+func TestRemoveClientDoesNotCancelInflightContexts(t *testing.T) {
+	resetClientMap()
+
+	session := &ClientSession{
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now(),
 	}
+	parent, parentCancel := context.WithCancel(context.Background())
+	defer parentCancel()
+	session.SetContext(parent)
+
+	AddClient("keepalive", session)
+
+	derived := session.GetContext(parent)
+	RemoveClient("keepalive")
+
+	if _, ok := GetClient("keepalive"); ok {
+		t.Error("GetClient returned true after RemoveClient")
+	}
+	select {
+	case <-derived.Done():
+		t.Error("RemoveClient cancelled the derived ctx (must not)")
+	default:
+		// Good: derived ctx is still live after RemoveClient.
+	}
+}
+
+// TestGetContextDoesNotLeakGoroutines exercises the bug where
+// concurrent GetContext calls would overwrite the per-session
+// cancelFunc, leaving earlier derived contexts stranded without
+// cancellation. Each call now returns its own ctx with its own
+// cancellation goroutine that releases when the caller cancels.
+func TestGetContextDoesNotLeakGoroutines(t *testing.T) {
+	resetClientMap()
+
+	session := &ClientSession{
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now(),
+	}
+
+	parent := context.Background()
+
+	// Fire many concurrent GetContext calls; each returns an
+	// independent ctx whose lifetime is owned by the caller.
+	const n = 50
+	ctxs := make([]context.Context, n)
+	cancels := make([]context.CancelFunc, n)
+	for i := 0; i < n; i++ {
+		ctxs[i], cancels[i] = context.WithCancel(session.GetContext(parent))
+	}
+
+	// Cancelling one must not affect the others.
+	cancels[0]()
+
+	for i := 0; i < n; i++ {
+		select {
+		case <-ctxs[i].Done():
+			if i != 0 {
+				t.Errorf("ctx[%d] cancelled unexpectedly", i)
+			}
+		default:
+			if i == 0 {
+				t.Errorf("ctx[0] should have been cancelled")
+			}
+		}
+	}
+
+	// Cancel the rest. The propagation goroutines must exit.
+	for i := 1; i < n; i++ {
+		cancels[i]()
+	}
+}
+
+// TestGetContextConcurrentCallsCancelIndependently verifies that two
+// concurrent GetContext calls produce two independent ctxs whose
+// lifetimes are owned by each caller. Cancelling one must not cancel
+// the other (the regression: previously a per-session cancelFunc
+// field was overwritten, so the first caller's cancel handle became
+// a dead reference while its goroutine leaked).
+func TestGetContextConcurrentCallsCancelIndependently(t *testing.T) {
+	resetClientMap()
+
+	session := &ClientSession{
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now(),
+	}
+
+	parent := context.Background()
+
+	ctxA, cancelA := context.WithCancel(session.GetContext(parent))
+	ctxB, cancelB := context.WithCancel(session.GetContext(parent))
+
+	cancelA()
+
+	select {
+	case <-ctxA.Done():
+		// Good.
+	case <-time.After(time.Second):
+		t.Fatal("ctxA did not cancel")
+	}
+
+	select {
+	case <-ctxB.Done():
+		t.Error("ctxB was cancelled when ctxA was cancelled")
+	default:
+		// Good.
+	}
+
+	cancelB()
 }
 
 func TestRemoveClientMissing(t *testing.T) {

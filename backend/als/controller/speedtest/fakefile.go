@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/samlm0/als/v2/als/client"
 	"github.com/samlm0/als/v2/config"
 )
 
@@ -56,17 +55,21 @@ func sizeToBytes(size string) (int64, error) {
 	return num, nil
 }
 
+// HandleFakeFile streams random bytes to the response to back the
+// client-side speedtest. The handler is registered under the
+// /session/:session group but does NOT call WaitQueue: this endpoint
+// has no shared state that needs FIFO serialisation, and the queue
+// handler is only running for speedtest-cli / iperf3. Calling
+// WaitQueue here would block forever.
 func HandleFakeFile(c *gin.Context) {
 	filename := c.Param("filename")
-	var re = regexp.MustCompile(`^(\d+)(KB|MB|GB|TB)\.test$`)
+	re := regexp.MustCompile(`^(\d+)(KB|MB|GB|TB)\.test$`)
 
 	pos := re.FindStringIndex(filename)
 	if pos == nil {
 		c.String(404, "404 file not found")
 		return
 	}
-
-	client.WaitQueue(c.Request.Context(), nil)
 
 	filename = filename[0 : len(filename)-5]
 	if !contains(config.Config.SpeedtestFileList, filename) {
@@ -88,22 +91,17 @@ func HandleFakeFile(c *gin.Context) {
 		}
 
 		for size > 0 {
-			// 如果剩余的大小小于缓冲区的大小，只写入剩余的大小
 			if size < int64(len(buf)) {
 				buf = buf[:size]
 			}
 
-			// 将缓冲区写入响应
 			if _, err := w.Write(buf); err != nil {
 				return false
 			}
 
-			// 更新剩余的大小
 			size -= int64(len(buf))
 		}
 
-		// 返回false表示我们已经完成了写入
 		return false
 	})
-	// c.Data()
 }
