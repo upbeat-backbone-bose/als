@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-pattern dist/** --ignore-pattern speedtest/** --ignore-pattern public/speedtest_worker.js",
+    "lint": "eslint src vite.config.js --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-pattern dist/** --ignore-pattern public/speedtest_worker.js",
     "format": "prettier --write src/"
   },
   "dependencies": {
@@ -15,7 +15,7 @@
     "vue": "^3.5.38"
   },
   "overrides": {
-    "brace-expansion": "^5.0.5",
+    "brace-expansion": "^5.0.6",
     "minimatch": "^10.2.5",
     "@eslint/eslintrc": {
       "minimatch": "^10.2.5"
