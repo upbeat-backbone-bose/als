@@ -113,14 +113,13 @@ func TestSetContextAndGetContext(t *testing.T) {
 func TestGetContextCancelledByRequest(t *testing.T) {
 	resetClientMap()
 
-	inner, innerCancel := context.WithCancel(context.Background())
-	defer innerCancel()
-
 	session := &ClientSession{
 		Channel:   make(chan *Message, 1),
 		CreatedAt: time.Now(),
 	}
-	session.SetContext(inner)
+	// Set a long-lived parent ctx so the c.ctx.Done() branch is
+	// never taken; the request ctx is the one that fires.
+	session.SetContext(context.Background())
 
 	req, reqCancel := context.WithCancel(context.Background())
 	derived := session.GetContext(req)
@@ -132,6 +131,32 @@ func TestGetContextCancelledByRequest(t *testing.T) {
 		// Good.
 	case <-time.After(time.Second):
 		t.Error("derived ctx did not cancel when request ctx was cancelled")
+	}
+}
+
+// TestGetContextCancelledByParent covers the c.ctx.Done() branch of
+// the propagation goroutine. We cancel the parent ctx that was
+// passed to SetContext and verify the derived ctx is cancelled too.
+func TestGetContextCancelledByParent(t *testing.T) {
+	resetClientMap()
+
+	parent, parentCancel := context.WithCancel(context.Background())
+
+	session := &ClientSession{
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now(),
+	}
+	session.SetContext(parent)
+
+	derived := session.GetContext(context.Background())
+
+	parentCancel()
+
+	select {
+	case <-derived.Done():
+		// Good.
+	case <-time.After(time.Second):
+		t.Error("derived ctx did not cancel when parent ctx was cancelled")
 	}
 }
 

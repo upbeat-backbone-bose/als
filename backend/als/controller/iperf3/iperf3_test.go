@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -130,6 +132,69 @@ func TestHandleSpawnsAndFailsWithoutIperf3(t *testing.T) {
 	// Without iperf3, cmd.Start fails -> 400.
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d; want 400; body = %s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleEndToEndWithFakeIperf3 drops a fake iperf3 onto PATH and
+// exercises the full handler path: random port selection, channel
+// send, cmd.Start, writer goroutines, cmd.Wait, response. The fake
+// binary writes a byte to stdout and exits, so cmd.Wait completes.
+func TestHandleEndToEndWithFakeIperf3(t *testing.T) {
+	if _, err := exec.LookPath("iperf3"); err == nil {
+		t.Skip("iperf3 is installed; cannot reliably override PATH")
+	}
+
+	gin.SetMode(gin.TestMode)
+
+	prev := config.Config
+	config.Config = &config.ALSConfig{
+		Iperf3StartPort: 30000,
+		Iperf3EndPort:   31000,
+	}
+	t.Cleanup(func() { config.Config = prev })
+
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "iperf3")
+	// Fake iperf3 that prints one byte then exits successfully.
+	script := "#!/bin/sh\necho x\nexit 0\n"
+	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake iperf3: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
+
+	session := &client.ClientSession{
+		Channel:   make(chan *client.Message, 4),
+		CreatedAt: time.Now(),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	session.SetContext(ctx)
+
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("clientSession", session)
+		c.Next()
+	})
+	r.GET("/probe", Handle)
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Handler should respond 200 because the fake iperf3 exits 0.
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d; want 200; body = %s", w.Code, w.Body.String())
+	}
+
+	// Verify the assigned port was streamed to the client.
+	select {
+	case msg := <-session.Channel:
+		if msg.Name != "Iperf3" {
+			t.Errorf("first message name = %q; want Iperf3", msg.Name)
+		}
+	case <-time.After(time.Second):
+		t.Error("no Iperf3 port message on the session channel")
 	}
 }
 

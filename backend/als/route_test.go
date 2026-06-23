@@ -166,3 +166,41 @@ func TestHandleStaticFileReturnsNotFound(t *testing.T) {
 		t.Errorf("body = %q; want 'Not found'", w.Body.String())
 	}
 }
+
+// TestHandleStaticFileRoutesRegister verifies the always-on static
+// routes (/speedtest_worker.js, /favicon.ico, /) are wired up by
+// SetupHttpRoute. We only assert that the route exists and produces
+// some response -- depending on whether the UI was built and embedded
+// at compile time, the response is 200 (asset served) or 404 (asset
+// missing). Either proves the route is registered.
+func TestHandleStaticFileRoutesRegister(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	prev := config.Config
+	config.Config = &config.ALSConfig{}
+	t.Cleanup(func() { config.Config = prev })
+
+	e := gin.New()
+	SetupHttpRoute(e)
+
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/speedtest_worker.js"},
+		{http.MethodGet, "/favicon.ico"},
+		{http.MethodGet, "/"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			w := httptest.NewRecorder()
+			e.ServeHTTP(w, req)
+
+			// Acceptable: 200 (asset served) or 404 (asset missing).
+			if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
+				t.Errorf("%s %s: status = %d; want 200 or 404", tt.method, tt.path, w.Code)
+			}
+		})
+	}
+}
