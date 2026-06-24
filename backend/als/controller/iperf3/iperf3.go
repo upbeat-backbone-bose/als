@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"io"
 	"math/big"
 	"os/exec"
 	"strconv"
@@ -54,27 +53,6 @@ func Handle(c *gin.Context) {
 
 	cmd := exec.CommandContext(ctx, "iperf3", "-s", "--forceflush", "-p", fmt.Sprintf("%d", port)) // #nosec G204 args are internally generated
 
-	writer := func(pipe io.ReadCloser) {
-		for {
-			buf := make([]byte, 1024)
-			n, err := pipe.Read(buf)
-			if err != nil {
-				return
-			}
-			msg := &client.Message{
-				Name:    "Iperf3Stream",
-				Content: string(buf[:n]),
-			}
-			// Non-blocking send so a slow consumer cannot block iperf3
-			// from completing.
-			if !client.SafeChannelSend(ctx, clientSession.Channel, msg) {
-				if ctx.Err() != nil {
-					return
-				}
-			}
-		}
-	}
-
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
@@ -94,8 +72,8 @@ func Handle(c *gin.Context) {
 		return
 	}
 
-	go writer(stdoutPipe)
-	go writer(stderrPipe)
+	go client.PipeToChannel(ctx, stdoutPipe, clientSession.Channel, "Iperf3Stream", nil)
+	go client.PipeToChannel(ctx, stderrPipe, clientSession.Channel, "Iperf3Stream", nil)
 
 	if err := cmd.Wait(); err != nil {
 		c.JSON(500, &gin.H{"success": false, "error": err.Error()})

@@ -47,7 +47,7 @@ func TestUpdateSystemResourceBroadcastsMemoryUsage(t *testing.T) {
 				t.Error("MemoryUsage content is empty")
 			}
 			got++
-		case <-time.After(deadline.Sub(time.Now())):
+		case <-time.After(time.Until(deadline)):
 			t.Fatalf("got %d MemoryUsage messages; want 2", got)
 		}
 	}

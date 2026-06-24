@@ -9,10 +9,18 @@ import (
 )
 
 func UpdateInterfaceCache(c *gin.Context) {
-	v, _ := c.Get("clientSession")
+	v, ok := c.Get("clientSession")
+	if !ok {
+		c.JSON(400, &gin.H{"success": false, "error": "Invalid session"})
+		return
+	}
 	clientSession := v.(*client.ClientSession)
 
-	interfaceCacheJson, _ := json.Marshal(timer.GetInterfaceCachesSnapshot())
+	interfaceCacheJson, err := json.Marshal(timer.GetInterfaceCachesSnapshot())
+	if err != nil {
+		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
+		return
+	}
 	clientSession.TrySend(&client.Message{
 		Name:    "InterfaceCache",
 		Content: string(interfaceCacheJson),

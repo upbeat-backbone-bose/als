@@ -25,16 +25,6 @@ func stubConfigGetter(t *testing.T, cfg *config.ALSConfig) {
 	t.Cleanup(func() { configGetter = prev })
 }
 
-// clearClients drops any session entries added by Handle so tests don't leak
-// across runs.
-func clearClients(t *testing.T) {
-	t.Helper()
-	client.RemoveClient("__test_cleanup__") // safe even if absent
-	// Best-effort cleanup: we only added clients via Handle, which uses
-	// fresh uuid per request. Use the public cleanup path so mutex is held.
-	_ = client.RemoveExpiredClients
-}
-
 func TestHandleSSEConfigEventOmitsInternalFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -322,15 +312,6 @@ func (r *safeResponseRecorder) WriteString(s string) (int, error) {
 
 func reqWithCtx(ctx context.Context) *http.Request {
 	return httptest.NewRequest(http.MethodGet, "/session", nil).WithContext(ctx)
-}
-
-// snapshot returns a copy of b's contents. Useful for reading
-// httptest.ResponseRecorder.Body concurrently with the handler.
-func snapshot(b interface{ Bytes() []byte }) string {
-	src := b.Bytes()
-	out := make([]byte, len(src))
-	copy(out, src)
-	return string(out)
 }
 
 // parseSSEEvent scans a SSE-formatted body and returns the data payload of

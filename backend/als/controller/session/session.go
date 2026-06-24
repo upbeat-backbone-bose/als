@@ -18,21 +18,21 @@ import (
 // Internal fields (listen_host/port, iperf3 port range) are intentionally
 // excluded; the UI must never see them.
 type ClientConfig struct {
-	ClientIP              string   `json:"my_ip"`
-	Location              string   `json:"location"`
-	PublicIPv4            string   `json:"public_ipv4"`
-	PublicIPv6            string   `json:"public_ipv6"`
-	SpeedtestFileList     []string `json:"speedtest_files"`
-	SponsorMessage        string   `json:"sponsor_message"`
-	FeaturePing           bool     `json:"feature_ping"`
-	FeatureShell          bool     `json:"feature_shell"`
-	FeatureLibrespeed     bool     `json:"feature_librespeed"`
-	FeatureFileSpeedtest  bool     `json:"feature_filespeedtest"`
-	FeatureSpeedtestDotNet bool    `json:"feature_speedtest_dot_net"`
-	FeatureIperf3         bool     `json:"feature_iperf3"`
-	FeatureMTR            bool     `json:"feature_mtr"`
-	FeatureTraceroute     bool     `json:"feature_traceroute"`
-	FeatureIfaceTraffic   bool     `json:"feature_iface_traffic"`
+	ClientIP               string   `json:"my_ip"`
+	Location               string   `json:"location"`
+	PublicIPv4             string   `json:"public_ipv4"`
+	PublicIPv6             string   `json:"public_ipv6"`
+	SpeedtestFileList      []string `json:"speedtest_files"`
+	SponsorMessage         string   `json:"sponsor_message"`
+	FeaturePing            bool     `json:"feature_ping"`
+	FeatureShell           bool     `json:"feature_shell"`
+	FeatureLibrespeed      bool     `json:"feature_librespeed"`
+	FeatureFileSpeedtest   bool     `json:"feature_filespeedtest"`
+	FeatureSpeedtestDotNet bool     `json:"feature_speedtest_dot_net"`
+	FeatureIperf3          bool     `json:"feature_iperf3"`
+	FeatureMTR             bool     `json:"feature_mtr"`
+	FeatureTraceroute      bool     `json:"feature_traceroute"`
+	FeatureIfaceTraffic    bool     `json:"feature_iface_traffic"`
 }
 
 func buildClientConfig(cfg *config.ALSConfig, clientIP string) ClientConfig {

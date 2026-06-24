@@ -11,10 +11,10 @@ import (
 // any tightening shows up as a deliberate test change.
 //
 // TODO(security): the current policy is unsafe for public deployments:
-//   1. Empty Origin is accepted (lets curl / native apps in, but also
-//      bypasses CSWSH defense since the browser sends Origin).
-//   2. Same-host comparison trusts r.Host, which can be overridden by
-//      Host-header smuggling or a misconfigured reverse proxy.
+//  1. Empty Origin is accepted (lets curl / native apps in, but also
+//     bypasses CSWSH defense since the browser sends Origin).
+//  2. Same-host comparison trusts r.Host, which can be overridden by
+//     Host-header smuggling or a misconfigured reverse proxy.
 //
 // These cases are kept as-is on purpose. When the policy is replaced with
 // an explicit allow-list, flip the wantAllow values and the next run of

@@ -102,33 +102,6 @@ func awaitEnqueued(t *testing.T, ctx context.Context) {
 	}
 }
 
-// awaitNotify waits until calls has reached want.
-func awaitNotify(t *testing.T, calls *atomic.Int32, want int32) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for calls.Load() < want {
-		if time.Now().After(deadline) {
-			t.Fatalf("notify fired %d times; want %d", calls.Load(), want)
-		}
-		runtime.Gosched()
-		time.Sleep(time.Millisecond)
-	}
-}
-
-// gate is a per-entry handshake: the notify callback signals "entered"
-// (so the test knows the handler has begun processing this entry) and
-// blocks on "release" (so the handler cannot advance until the test
-// explicitly releases it). This lets tests observe FIFO ordering without
-// race-prone enqueue-time polling.
-type gate struct {
-	entered chan struct{}
-	release chan struct{}
-}
-
-func newGate() *gate {
-	return &gate{entered: make(chan struct{}), release: make(chan struct{})}
-}
-
 func TestHandleQueueFIFO(t *testing.T) {
 	resetQueueForTest(t)
 	_, stop := startHandler(t)

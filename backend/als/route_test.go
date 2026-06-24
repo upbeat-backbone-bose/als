@@ -28,19 +28,19 @@ func TestSetupHttpRouteAllFeaturesOff(t *testing.T) {
 	// Even with every feature off we still register the always-on
 	// routes (session, assets, root, speedtest_worker.js, favicon.ico).
 	want := map[string]bool{
-		"GET /session":                          false,
-		"GET /method/iperf3/server":             false,
-		"GET /method/ping":                      false,
-		"GET /method/speedtest_dot_net":         false,
-		"GET /method/cache/interfaces":          false,
-		"GET /session/:session/shell":           false,
+		"GET /session":                                   false,
+		"GET /method/iperf3/server":                      false,
+		"GET /method/ping":                               false,
+		"GET /method/speedtest_dot_net":                  false,
+		"GET /method/cache/interfaces":                   false,
+		"GET /session/:session/shell":                    false,
 		"GET /session/:session/speedtest/file/:filename": false,
-		"GET /session/:session/speedtest/download": false,
-		"POST /session/:session/speedtest/upload": false,
-		"GET /assets/:filename":                 false,
-		"GET /":                                 false,
-		"GET /speedtest_worker.js":              false,
-		"GET /favicon.ico":                      false,
+		"GET /session/:session/speedtest/download":       false,
+		"POST /session/:session/speedtest/upload":        false,
+		"GET /assets/:filename":                          false,
+		"GET /":                                          false,
+		"GET /speedtest_worker.js":                       false,
+		"GET /favicon.ico":                               false,
 	}
 	for _, r := range routes {
 		key := r.Method + " " + r.Path
@@ -82,19 +82,19 @@ func TestSetupHttpRouteAllFeaturesOn(t *testing.T) {
 	SetupHttpRoute(e)
 
 	want := map[string]bool{
-		"GET /session":                          false,
-		"GET /method/iperf3/server":             false,
-		"GET /method/ping":                      false,
-		"GET /method/speedtest_dot_net":         false,
-		"GET /method/cache/interfaces":          false,
-		"GET /session/:session/shell":           false,
+		"GET /session":                                   false,
+		"GET /method/iperf3/server":                      false,
+		"GET /method/ping":                               false,
+		"GET /method/speedtest_dot_net":                  false,
+		"GET /method/cache/interfaces":                   false,
+		"GET /session/:session/shell":                    false,
 		"GET /session/:session/speedtest/file/:filename": false,
-		"GET /session/:session/speedtest/download": false,
-		"POST /session/:session/speedtest/upload": false,
-		"GET /assets/:filename":                 false,
-		"GET /":                                 false,
-		"GET /speedtest_worker.js":              false,
-		"GET /favicon.ico":                      false,
+		"GET /session/:session/speedtest/download":       false,
+		"POST /session/:session/speedtest/upload":        false,
+		"GET /assets/:filename":                          false,
+		"GET /":                                          false,
+		"GET /speedtest_worker.js":                       false,
+		"GET /favicon.ico":                               false,
 	}
 	for _, r := range routesFor(e) {
 		key := r.Method + " " + r.Path
@@ -114,7 +114,7 @@ func TestSetupHttpRouteSelectiveFeatures(t *testing.T) {
 
 	prev := config.Config
 	config.Config = &config.ALSConfig{
-		FeaturePing: true,
+		FeaturePing:  true,
 		FeatureShell: true,
 	}
 	t.Cleanup(func() { config.Config = prev })
