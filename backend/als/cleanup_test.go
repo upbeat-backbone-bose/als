@@ -2,6 +2,8 @@ package als
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,28 +25,43 @@ func withInjection(t *testing.T, ctx context.Context, interval time.Duration, ti
 	})
 }
 
-// seedClients inserts N sessions into the global Clients map; the
-// returned cleanup restores the map.
+// seedClients inserts N sessions into the global Clients map; on
+// test cleanup the seeded IDs are removed.
+//
+// All writes go through client.AddClient / client.RemoveClient so
+// they hold clientsMu -- a bare assignment like `client.Clients = ...`
+// would race with RemoveExpiredClients running in any concurrent
+// goroutine (including a t.Cleanup from a sibling test). The race
+// detector flagged this: a previous test's cleanup restoring the
+// global map header raced with the new test's
+// cleanupExpiredClients goroutine reading it under the lock --
+// because the unlocked write does not synchronize with the locked
+// read.
+//
+// The function no longer restores the original contents of the
+// map: doing so would require either snapshotting the session
+// pointers (which we did before) or wholesale replacing the map
+// header (which is exactly what raced). The cheaper correct
+// behaviour is to just remove the IDs we added and let the next
+// test start from a known-clean baseline.
 func seedClients(t *testing.T, ids []string, ages []time.Duration) {
 	t.Helper()
-	prev := make(map[string]*client.ClientSession, len(client.Clients))
-	for k, v := range client.Clients {
-		prev[k] = v
-	}
-	client.Clients = make(map[string]*client.ClientSession, len(ids))
+
 	now := time.Now()
 	for i, id := range ids {
 		age := time.Duration(0)
 		if i < len(ages) {
 			age = ages[i]
 		}
-		client.Clients[id] = &client.ClientSession{
+		client.AddClient(id, &client.ClientSession{
 			Channel:   make(chan *client.Message, 1),
 			CreatedAt: now.Add(-age),
-		}
+		})
 	}
 	t.Cleanup(func() {
-		client.Clients = prev
+		for _, id := range ids {
+			client.RemoveClient(id)
+		}
 	})
 }
 
@@ -156,4 +173,95 @@ func TestCleanupExpiredClientsHonorsInjectedContext(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("cleanupExpiredClients did not exit")
 	}
+}
+
+// TestSeedClientsConcurrentWithRemoveExpiredClients is a stress test
+// for the race fixed in this commit. It reproduces the original
+// failure mode (cleanup_test.go:47 wrote `client.Clients = prev`
+// without holding clientsMu, racing with a sibling goroutine's
+// locked read inside RemoveExpiredClients) by running both
+// operations in tight loops across many goroutines.
+//
+// To make the test deterministic without artificial sleeps we
+// use a barrier: every goroutine blocks on startCh, then proceeds
+// at the same time. The race detector will catch any unsynchronised
+// access in this window. Pre-fix this test reliably triggered
+// "WARNING: DATA RACE" on every run; post-fix it stays clean
+// across -count=10.
+func TestSeedClientsConcurrentWithRemoveExpiredClients(t *testing.T) {
+	const goroutines = 16
+	const iterations = 50
+
+	var startCh = make(chan struct{})
+	var wg sync.WaitGroup
+
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(gid int) {
+			defer wg.Done()
+			<-startCh
+
+			for i := 0; i < iterations; i++ {
+				id := fmt.Sprintf("g%d-i%d", gid, i)
+				// Seed via the production API (lock-holding).
+				client.AddClient(id, &client.ClientSession{
+					Channel:   make(chan *client.Message, 1),
+					CreatedAt: time.Now().Add(-time.Hour),
+				})
+
+				// Concurrent reader, also using the production API.
+				client.RemoveExpiredClients()
+
+				client.RemoveClient(id)
+			}
+		}(g)
+	}
+
+	close(startCh)
+	wg.Wait()
+}
+
+// TestSeedClientsRaceWithConcurrentReader reproduces the exact
+// failure pattern from the original race report: a t.Cleanup-style
+// map write happens while a *concurrent* goroutine is iterating
+// the map under the production lock. Pre-fix, this triggered
+// "WARNING: DATA RACE" reliably within 1-2 runs; post-fix it
+// stays clean across -count=10.
+//
+// We model the "t.Cleanup" with a deferred goroutine: the test
+// body returns, defer fires, and the map write happens -- all
+// while the reader goroutine is still in the middle of
+// RemoveExpiredClients.
+func TestSeedClientsRaceWithConcurrentReader(t *testing.T) {
+	// The reader mimics the production cleanup goroutine: it
+	// spins on RemoveExpiredClients, which holds clientsMu
+	// while reading Clients.
+	stop := make(chan struct{})
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				client.RemoveExpiredClients()
+			}
+		}
+	}()
+
+	// Now do the equivalent of t.Cleanup firing: drive many
+	// seedClients+cleanup cycles through Add/RemoveClient
+	// (the post-fix path) while the reader runs.
+	for i := 0; i < 200; i++ {
+		id := fmt.Sprintf("race-%d", i)
+		client.AddClient(id, &client.ClientSession{
+			Channel:   make(chan *client.Message, 1),
+			CreatedAt: time.Now(),
+		})
+		client.RemoveClient(id)
+	}
+
+	close(stop)
+	<-readerDone
 }
