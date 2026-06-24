@@ -39,36 +39,37 @@ func SafeChannelSend(ctx context.Context, ch chan<- *Message, msg *Message) bool
 // exhausted or ctx is cancelled. extraCheck, if non-nil, is called
 // before each send and should return false to stop piping.
 //
-// Performance baseline (Intel Xeon, GOMAXPROCS=2, -benchtime=3s,
-// 5-run median, 64KB iperf3-style stream):
+// Performance baseline (Intel Xeon, GOMAXPROCS=2, 5-run bench +
+// 3-run profile, 64KB iperf3-style stream):
 //
-//	7,755 ns/op, 20,552 B/op, 41 allocs/op
+//	7,866 ± 54 ns/op, 20,540 B/op, 41 allocs/op
 //
-// The 1KiB read buffer was chosen over larger alternatives after
-// measuring all three (1K / 8K / 32K) on a 64KB stream:
+// The 1KiB read buffer was chosen over larger alternatives
+// (8K, 32K) after measuring all three with mean ± std-dev:
 //
-//	buffer    ns/op    B/op    allocs/op
-//	1K         7,755   20,552   41    <- chosen
-//	8K        19,439   74,208   21
-//	32K       18,420   98,592    9
+//	buffer   ns/op              allocs/op   string()   channel    alloc     read
+//	1K       7,866  ±   54     41          47.1%      30.7%      14.6%      5.4%
+//	8K      19,779  ±  518     21          63.0%      17.7%      11.9%      6.5%
+//	32K     18,480  ±  436      9          43.4%       7.9%      33.6%     14.6%
 //
-// The intuition "bigger buffer = fewer string() calls = faster" is
-// wrong here. Each string(buf[:n]) is a heap allocation + memcpy
-// sized to n, so a 32K string() is 32x more expensive than a 1K
-// one. The marginal alloc-count reduction (41 -> 9) is not
-// worth the per-call cost increase. The 1K buffer produces the
-// smallest memcopy work and the lowest per-message byte cost.
+// 1K is 2.4x faster than 8K and 2.3x faster than 32K. The gap is
+// much larger than the standard deviation (which is < 3% of the
+// mean for all three configurations), so the result is
+// statistically robust, not noise.
 //
-// The 41 allocs/op for 64KB of data amounts to ~4100 allocations
-// per second for a 100-msg/sec iperf3 stream -- well below any
-// GC trigger threshold.
+// The intuition "bigger buffer = fewer string() calls = faster"
+// is wrong here. Each string(buf[:n]) is a heap allocation + memcpy
+// sized to n bytes; a 32K string() is 32x more memcpy work than
+// a 1K one. The 4x reduction in call count (8 calls -> 2 calls
+// for 8K/32K) is dwarfed by the 32x increase in per-call cost.
 //
-// Profile attribution for the 1K case is dominated by
-// runtime.slicebytetostring (similar fraction to 32K), with
-// strings.(*Reader).Read and runtime.newobject trailing.
+// 41 allocs/op for 64KB of data is ~4100 allocations per second
+// for a 100-msg/sec iperf3 stream -- well below any GC trigger
+// threshold, so the lower alloc count of 8K/32K does not pay off.
 //
-// See docs/backend-perf.md for the full comparison and the
-// rejected alternatives (8K, 32K, []byte API).
+// See docs/backend-perf.md for the full comparison data, profile
+// attribution, and the rejected alternatives ([]byte API, larger
+// buffer).
 func PipeToChannel(ctx context.Context, pipe io.ReadCloser, ch chan<- *Message, name string, extraCheck func() bool) {
 	var buf [1024]byte
 	for {
