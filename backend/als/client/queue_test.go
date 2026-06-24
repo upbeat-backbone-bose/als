@@ -80,27 +80,16 @@ func startHandler(t *testing.T) (stop func()) {
 // time.Sleep-based synchronization.
 func awaitEnqueued(t *testing.T, ctx context.Context) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
+	waitFor(t, 2*time.Second, "context enqueued", func() bool {
 		queueLock.Lock()
-		found := false
+		defer queueLock.Unlock()
 		for _, e := range queueEntries {
 			if e.ctx == ctx {
-				found = true
-				break
+				return true
 			}
 		}
-		remaining := len(queueEntries)
-		queueLock.Unlock()
-		if found {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("context never enqueued within 2s; queue size=%d", remaining)
-		}
-		runtime.Gosched()
-		time.Sleep(time.Millisecond)
-	}
+		return false
+	})
 }
 
 func TestHandleQueueFIFO(t *testing.T) {
@@ -194,20 +183,12 @@ func TestHandleQueueSkipsAlreadyDoneHead(t *testing.T) {
 	default:
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for {
+	waitFor(t, 2*time.Second, "head removed", func() bool {
 		queueLock.Lock()
 		remaining := len(queueEntries)
 		queueLock.Unlock()
-		if remaining == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("head not removed; remaining=%d", remaining)
-		}
-		runtime.Gosched()
-		time.Sleep(time.Millisecond)
-	}
+		return remaining == 0
+	})
 
 	if got := calls.Load(); got != 0 {
 		t.Errorf("notify called %d times for already-done head; want 0", got)
@@ -418,20 +399,12 @@ func TestShutdownQueueReleasesAllWaiters(t *testing.T) {
 	}
 
 	// Wait for all entries to be parked.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
+	waitFor(t, 2*time.Second, "all callers parked", func() bool {
 		queueLock.Lock()
 		n := len(queueEntries)
 		queueLock.Unlock()
-		if n >= parked {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("only %d/%d callers parked within 2s", n, parked)
-		}
-		runtime.Gosched()
-		time.Sleep(time.Millisecond)
-	}
+		return n >= parked
+	})
 
 	ShutdownQueue()
 

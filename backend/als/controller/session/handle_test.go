@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,33 @@ import (
 	"github.com/samlm0/als/v2/als/client"
 	"github.com/samlm0/als/v2/config"
 )
+
+// waitFor spins until cond returns true or timeout elapses. Replaces
+// the legacy time.Sleep-based polling. See als/client/wait_helpers_test.go
+// for the canonical version.
+//
+// linter's per-file analysis can't see across files.
+//
+//nolint:unparam // each call site picks a different timeout; the
+func waitFor(t *testing.T, timeout time.Duration, msg string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		if cond() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("waitFor timed out after %v: %s", timeout, msg)
+		}
+		select {
+		case <-tick.C:
+		default:
+			runtime.Gosched()
+		}
+	}
+}
 
 // stubConfigGetter replaces configGetter for the duration of t.
 func stubConfigGetter(t *testing.T, cfg *config.ALSConfig) {
@@ -129,25 +157,11 @@ func TestHandleRegistersAndRemovesClient(t *testing.T) {
 	}()
 
 	// Phase 1: the session must be registered in the global map.
-	deadline := time.Now().Add(time.Second)
-	var session *client.ClientSession
-	for {
+	waitFor(t, time.Second, "Handle registered a session", func() bool {
 		client.ClientsMu().RLock()
-		for _, s := range client.Clients {
-			if s != nil {
-				session = s
-				break
-			}
-		}
-		client.ClientsMu().RUnlock()
-		if session != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("Handle did not register a session within 1s")
-		}
-		time.Sleep(time.Millisecond)
-	}
+		defer client.ClientsMu().RUnlock()
+		return len(client.Clients) > 0
+	})
 
 	// Phase 2: cancel the request, wait for the handler to return, and
 	// verify the session is no longer in the global map (defer fires).
@@ -158,19 +172,12 @@ func TestHandleRegistersAndRemovesClient(t *testing.T) {
 		t.Fatal("Handle did not exit after ctx cancel")
 	}
 
-	deadline = time.Now().Add(time.Second)
-	for {
+	waitFor(t, time.Second, "session removed", func() bool {
 		client.ClientsMu().RLock()
 		n := len(client.Clients)
 		client.ClientsMu().RUnlock()
-		if n == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("session not removed from global map; remaining=%d", n)
-		}
-		time.Sleep(time.Millisecond)
-	}
+		return n == 0
+	})
 
 	if !strings.Contains(bodyBuf.String(), "event:SessionId") {
 		t.Errorf("SessionId event missing from body: %s", bodyBuf.String())
@@ -206,24 +213,17 @@ func TestHandleStreamsCustomEvent(t *testing.T) {
 
 	// Wait until Handle has registered the session in the global map.
 	var session *client.ClientSession
-	deadline := time.Now().Add(time.Second)
-	for {
+	waitFor(t, time.Second, "Handle registered a session", func() bool {
 		client.ClientsMu().RLock()
+		defer client.ClientsMu().RUnlock()
 		for _, s := range client.Clients {
 			if s != nil {
 				session = s
-				break
+				return true
 			}
 		}
-		client.ClientsMu().RUnlock()
-		if session != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("Handle did not register a session within 1s")
-		}
-		time.Sleep(time.Millisecond)
-	}
+		return false
+	})
 
 	// Push a message. The handler picks it up and emits it as an SSE
 	// event named after msg.Name.
@@ -234,18 +234,11 @@ func TestHandleStreamsCustomEvent(t *testing.T) {
 	}
 
 	// Wait until the SSE body contains our event.
-	deadline = time.Now().Add(time.Second)
-	for {
+	waitFor(t, time.Second, "Ping event streamed", func() bool {
 		body := bodyBuf.String()
-		if strings.Contains(body, "event:Ping") &&
-			strings.Contains(body, "data:pong") {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("Ping event not streamed within 1s")
-		}
-		time.Sleep(time.Millisecond)
-	}
+		return strings.Contains(body, "event:Ping") &&
+			strings.Contains(body, "data:pong")
+	})
 
 	// Cancel to let the handler return.
 	cancel()
@@ -279,25 +272,18 @@ func TestHandleExitsWhenChannelCloses(t *testing.T) {
 	}()
 
 	// Wait for the session to be registered, then close its channel.
-	deadline := time.Now().Add(time.Second)
 	var session *client.ClientSession
-	for {
+	waitFor(t, time.Second, "Handle registered a session", func() bool {
 		client.ClientsMu().RLock()
+		defer client.ClientsMu().RUnlock()
 		for _, s := range client.Clients {
 			if s != nil {
 				session = s
-				break
+				return true
 			}
 		}
-		client.ClientsMu().RUnlock()
-		if session != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("Handle did not register a session within 1s")
-		}
-		time.Sleep(time.Millisecond)
-	}
+		return false
+	})
 	close(session.Channel)
 
 	// Handle should observe the closed channel and return.
