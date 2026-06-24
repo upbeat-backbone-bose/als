@@ -87,3 +87,62 @@ jobs:
       - name: Build backend
         run: go build -v ./...
         working-directory: ./backend
+
+  # Static analysis: enforces the rules in backend/.golangci.yml
+  # (errcheck, govet, staticcheck, gocritic, etc.). Runs in parallel
+  # with the backend build/test job so a lint failure surfaces on its
+  # own line in the PR check status instead of being hidden behind a
+  # test failure. Independent of build-ui so lints stay green even
+  # when the UI artifact is not yet ready.
+  backend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Go
+        uses: actions/setup-go@v6.4.0
+        with:
+          go-version-file: "backend/go.mod"
+          cache-dependency-path: "backend/go.sum"
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      - name: Install goimports
+        run: go install golang.org/x/tools/cmd/goimports@latest
+      - name: Install golangci-lint
+        # Pin to v2.11.4: v2.4.0 was built with go1.25 and refuses
+        # to lint projects whose go.mod requires go1.26+. v2.11.4
+        # is built with go1.26.1 and works against the current
+        # go.mod (go 1.26.4). v2.12.x ships but its install.sh
+        # currently has a stale hash entry that fails signature
+        # verification; track golangci-lint releases and bump
+        # when v2.12.x is repaired upstream.
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v2.11.4
+      - name: gofmt check
+        # Fail if any .go file is not gofmt-clean.
+        run: |
+          set -euo pipefail
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "::error::The following files are not gofmt-clean:"
+            gofmt -l .
+            exit 1
+          fi
+        working-directory: ./backend
+      - name: goimports check
+        run: |
+          set -euo pipefail
+          if [ -n "$(goimports -l .)" ]; then
+            echo "::error::The following files are not goimports-clean:"
+            goimports -l .
+            exit 1
+          fi
+        working-directory: ./backend
+      - name: staticcheck
+        run: staticcheck ./...
+        working-directory: ./backend
+      - name: golangci-lint
+        # .golangci.yml is v2 format. --timeout is generous: the
+        # linter can spend several seconds on gocritic per file.
+        run: golangci-lint run --timeout 5m ./...
+        working-directory: ./backend
