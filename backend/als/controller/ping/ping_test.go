@@ -3,6 +3,7 @@ package ping
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -57,6 +58,10 @@ func TestHandleInvalidIP(t *testing.T) {
 }
 
 func TestHandleValidIPReturnsOK(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("ICMP requires root or CAP_NET_RAW; skip in non-privileged environments")
+	}
+
 	gin.SetMode(gin.TestMode)
 
 	session := &client.ClientSession{
