@@ -10,6 +10,8 @@ import (
 )
 
 func TestBuildClientConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		cfg  *config.ALSConfig
@@ -106,6 +108,8 @@ func TestClientConfigJSONOmitsInternalFields(t *testing.T) {
 }
 
 func TestClientConfigJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		in   ClientConfig

@@ -21,7 +21,6 @@ func updatePublicIP() {
 		if err == nil {
 			Config.PublicIPv4 = addr
 			log.Printf("Public IPv4 address: %s\n", addr)
-			// fmt.Println(Config)
 			return
 		}
 
@@ -92,7 +91,11 @@ func getPublicIPViaHttp(client *http.Client) (string, error) {
 	}
 
 	for _, url := range lists {
-		resp, err := client.Get(url)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+		if err != nil {
+			continue
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			continue
 		}

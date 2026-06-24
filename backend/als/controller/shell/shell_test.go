@@ -20,6 +20,8 @@ import (
 // an explicit allow-list, flip the wantAllow values and the next run of
 // this test will surface every regression.
 func TestCheckOriginCurrentBehavior(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		host      string
@@ -65,7 +67,7 @@ func TestCheckOriginCurrentBehavior(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.Host = tt.host
 			if tt.origin != "" {
 				req.Header.Set("Origin", tt.origin)
@@ -87,7 +89,7 @@ func TestUpgraderUsesCheckOrigin(t *testing.T) {
 		t.Fatal("upgrader.CheckOrigin must not be nil")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Host = "als.example.com"
 	req.Header.Set("Origin", "https://als.example.com")
 
@@ -104,6 +106,8 @@ func TestUpgraderUsesCheckOrigin(t *testing.T) {
 // if url.Parse fails, checkOrigin must return false (never true). This
 // guards against a future refactor accidentally widening the policy.
 func TestCheckOriginReturnsFalseOnInvalidURL(t *testing.T) {
+	t.Parallel()
+
 	tests := []string{
 		// Control characters that url.Parse rejects.
 		"http://\x7f",
@@ -115,7 +119,7 @@ func TestCheckOriginReturnsFalseOnInvalidURL(t *testing.T) {
 		t.Run(strings.ReplaceAll(origin, "\x00", "_NUL_"), func(t *testing.T) {
 			t.Parallel()
 
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.Host = "als.example.com"
 			req.Header.Set("Origin", origin)
 

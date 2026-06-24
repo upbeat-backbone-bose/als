@@ -281,3 +281,30 @@ func TestClientsMuExposesInternalMutex(t *testing.T) {
 		t.Fatal("ClientsMu returned nil")
 	}
 }
+
+func TestSessionFromContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		in     any
+		wantOK bool
+	}{
+		{name: "nil input", in: nil, wantOK: false},
+		{name: "wrong type", in: "not a session", wantOK: false},
+		{name: "int input", in: 42, wantOK: false},
+		{name: "valid session", in: &ClientSession{}, wantOK: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := SessionFromContext(tt.in)
+			if ok != tt.wantOK {
+				t.Errorf("SessionFromContext(%T) ok = %v; want %v", tt.in, ok, tt.wantOK)
+			}
+			if ok && got == nil {
+				t.Error("ok but got nil session")
+			}
+		})
+	}
+}

@@ -14,21 +14,25 @@ import (
 	"github.com/samlm0/als/v2/config"
 )
 
-func randomPort(min, max int) (int, error) {
-	if max < min {
+func randomPort(lo, hi int) (int, error) {
+	if hi < lo {
 		return 0, fmt.Errorf("invalid port range")
 	}
-	rng := max - min + 1
+	rng := hi - lo + 1
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(rng)))
 	if err != nil {
 		return 0, err
 	}
-	return int(n.Int64()) + min, nil
+	return int(n.Int64()) + lo, nil
 }
 
 func Handle(c *gin.Context) {
 	v, _ := c.Get("clientSession")
-	clientSession := v.(*client.ClientSession)
+	clientSession, ok := client.SessionFromContext(v)
+	if !ok {
+		c.JSON(500, &gin.H{"success": false, "error": "Invalid session"})
+		return
+	}
 
 	timeout := time.Second * 60
 	port, err := randomPort(config.Config.Iperf3StartPort, config.Config.Iperf3EndPort)

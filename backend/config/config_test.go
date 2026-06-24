@@ -67,8 +67,7 @@ func TestGetDefaultConfig(t *testing.T) {
 // equalish compares two values, falling back to reflect.DeepEqual for
 // slices and maps (which `==` rejects).
 func equalish(a, b any) bool {
-	switch a.(type) {
-	case []string:
+	if _, ok := a.([]string); ok {
 		return reflect.DeepEqual(a, b)
 	}
 	return a == b

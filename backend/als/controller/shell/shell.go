@@ -53,9 +53,13 @@ func HandleNewShell(c *gin.Context) {
 		fmt.Println(err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	v, _ := c.Get("clientSession")
-	clientSession := v.(*client.ClientSession)
+	clientSession, ok := client.SessionFromContext(v)
+	if !ok {
+		_ = conn.Close()
+		return
+	}
 	handleNewConnection(conn, clientSession, c)
 }
 
@@ -72,7 +76,7 @@ func handleNewConnection(conn *websocket.Conn, session *client.ClientSession, gi
 	if err != nil {
 		return
 	}
-	defer ptmx.Close()
+	defer func() { _ = ptmx.Close() }()
 
 	// context aware
 	go func() {

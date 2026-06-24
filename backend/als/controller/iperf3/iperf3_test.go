@@ -36,7 +36,7 @@ func TestHandleInvalidPortRange(t *testing.T) {
 	})
 	r.GET("/probe", Handle)
 
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -78,7 +78,7 @@ func TestHandleClientDisconnected(t *testing.T) {
 
 	cancelledReqCtx, cancelReq := context.WithCancel(context.Background())
 	cancelReq()
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil).WithContext(cancelledReqCtx)
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody).WithContext(cancelledReqCtx)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -125,7 +125,7 @@ func TestHandleSpawnsAndFailsWithoutIperf3(t *testing.T) {
 	})
 	r.GET("/probe", Handle)
 
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -178,7 +178,7 @@ func TestHandleEndToEndWithFakeIperf3(t *testing.T) {
 	})
 	r.GET("/probe", Handle)
 
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -203,8 +203,8 @@ func TestRandomPortInRange(t *testing.T) {
 
 	tests := []struct {
 		name string
-		min  int
-		max  int
+		lo   int
+		hi   int
 	}{
 		{"normal range", 30000, 31000},
 		{"narrow range", 5000, 5001},
@@ -217,12 +217,12 @@ func TestRandomPortInRange(t *testing.T) {
 			t.Parallel()
 			// Run several iterations since randomPort uses crypto/rand.
 			for i := 0; i < 100; i++ {
-				port, err := randomPort(tt.min, tt.max)
+				port, err := randomPort(tt.lo, tt.hi)
 				if err != nil {
-					t.Fatalf("randomPort(%d, %d) error: %v", tt.min, tt.max, err)
+					t.Fatalf("randomPort(%d, %d) error: %v", tt.lo, tt.hi, err)
 				}
-				if port < tt.min || port > tt.max {
-					t.Errorf("randomPort(%d, %d) = %d; out of range", tt.min, tt.max, port)
+				if port < tt.lo || port > tt.hi {
+					t.Errorf("randomPort(%d, %d) = %d; out of range", tt.lo, tt.hi, port)
 				}
 			}
 		})
@@ -234,8 +234,8 @@ func TestRandomPortInvalidRange(t *testing.T) {
 
 	tests := []struct {
 		name string
-		min  int
-		max  int
+		lo   int
+		hi   int
 	}{
 		{"max less than min", 100, 50},
 	}
@@ -243,16 +243,16 @@ func TestRandomPortInvalidRange(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			port, err := randomPort(tt.min, tt.max)
+			port, err := randomPort(tt.lo, tt.hi)
 			if err == nil {
-				t.Errorf("randomPort(%d, %d) = %d; want error", tt.min, tt.max, port)
+				t.Errorf("randomPort(%d, %d) = %d; want error", tt.lo, tt.hi, port)
 			}
 		})
 	}
 }
 
 // randomPort does not validate that the values are positive port
-// numbers -- only that max >= min. Negative values are accepted but
+// numbers -- only that hi >= lo. Negative values are accepted but
 // cannot be opened. We document the current behaviour here.
 func TestRandomPortAcceptsNegativeRange(t *testing.T) {
 	t.Parallel()
@@ -288,4 +288,21 @@ func FuzzRandomPort(f *testing.F) {
 			t.Errorf("randomPort(%d, %d) = %d; out of range [%d, %d]", lo, hi, port, lo, hi)
 		}
 	})
+}
+
+// TestHandleMissingSession covers the 500 path when no clientSession
+// is set on the gin context (middleware not installed).
+func TestHandleMissingSession(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.GET("/probe", Handle)
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d; want 500; body = %s", w.Code, w.Body.String())
+	}
 }

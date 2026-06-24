@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,11 +14,15 @@ func updateLocation() {
 	log.Default().Println("Updating server location from internet...")
 
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("https://ipapi.co/json/")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://ipapi.co/json/", http.NoBody)
 	if err != nil {
 		return
 	}
-	defer resp.Body.Close()
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return
 	}

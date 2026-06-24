@@ -74,17 +74,17 @@ func ShutdownQueue() {
 	}
 }
 
-func GetQueuePositionByCtx(ctx context.Context) (int, int) {
+func GetQueuePositionByCtx(ctx context.Context) (position, total int) {
 	queueLock.Lock()
 	defer queueLock.Unlock()
 
-	total := len(queueEntries)
+	total = len(queueEntries)
 	for i, e := range queueEntries {
 		if e.ctx == ctx {
 			return i + 1, total
 		}
 	}
-	return 0, 0
+	return 0, total
 }
 
 // HandleQueue drains the global FIFO queue until ctx is cancelled.

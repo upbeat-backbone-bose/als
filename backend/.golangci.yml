@@ -30,7 +30,10 @@ linters:
   settings:
     errcheck:
       check-type-assertions: true
-      check-blank: true
+      # check-blank=false: explicit `_ = close()` is the idiomatic way to
+      # silence close-on-defer / kill-on-context-cancel error paths
+      # where there is nothing useful to do with the result.
+      check-blank: false
     govet:
       enable:
         - shadow

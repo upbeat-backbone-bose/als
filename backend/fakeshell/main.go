@@ -20,14 +20,6 @@ func HandleConsole() {
 	menu := app.ActiveMenu()
 	setupPrompt(menu)
 
-	// go func() {
-	// 	sig := make(chan os.Signal)
-	// 	signal.Notify(sig)
-	// 	for s := range sig {
-	// 		fmt.Println(s)
-	// 	}
-	// }()
-
 	menu.AddInterrupt(io.EOF, exitCtrlD)
 	menu.SetCommands(defineMenuCommands())
 	if err := app.Start(); err != nil {

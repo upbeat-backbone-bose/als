@@ -155,7 +155,7 @@ func TestHandleStaticFileReturnsNotFound(t *testing.T) {
 		handleStatisFile("does-not-exist.html", c)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
 	w := httptest.NewRecorder()
 	e.ServeHTTP(w, req)
 
@@ -193,7 +193,7 @@ func TestHandleStaticFileRoutesRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.path, nil)
+			req := httptest.NewRequest(tt.method, tt.path, http.NoBody)
 			w := httptest.NewRecorder()
 			e.ServeHTTP(w, req)
 

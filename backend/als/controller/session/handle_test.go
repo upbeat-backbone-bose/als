@@ -56,7 +56,7 @@ func TestHandleSSEConfigEventOmitsInternalFields(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	req := httptest.NewRequest(http.MethodGet, "/session", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/session", http.NoBody).WithContext(ctx)
 	w := httptest.NewRecorder()
 
 	done := make(chan struct{})
@@ -357,7 +357,7 @@ func (r *safeResponseRecorder) WriteString(s string) (int, error) {
 }
 
 func reqWithCtx(ctx context.Context) *http.Request {
-	return httptest.NewRequest(http.MethodGet, "/session", nil).WithContext(ctx)
+	return httptest.NewRequest(http.MethodGet, "/session", http.NoBody).WithContext(ctx)
 }
 
 // parseSSEEvent scans a SSE-formatted body and returns the data payload of

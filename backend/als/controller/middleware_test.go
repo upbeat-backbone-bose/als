@@ -50,7 +50,7 @@ func TestMiddlewareSessionOnHeader(t *testing.T) {
 				c.JSON(http.StatusOK, gin.H{"ok": true})
 			})
 
-			req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+			req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
 			if tt.header != "" {
 				req.Header.Set("session", tt.header)
 			}
@@ -90,7 +90,7 @@ func TestMiddlewareSessionOnUrl(t *testing.T) {
 				c.JSON(http.StatusOK, gin.H{"ok": true})
 			})
 
-			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			req := httptest.NewRequest(http.MethodGet, tt.path, http.NoBody)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 
@@ -109,7 +109,7 @@ func TestMiddlewareSessionOnHeaderErrorBody(t *testing.T) {
 	r.Use(MiddlewareSessionOnHeader())
 	r.GET("/", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{}) })
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

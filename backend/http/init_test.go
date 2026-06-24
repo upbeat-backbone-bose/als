@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -35,7 +36,7 @@ func TestGetEngine(t *testing.T) {
 	// request. This proves GetEngine returns the live engine.
 	e.GET("/probe", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
 	w := httptest.NewRecorder()
 	e.ServeHTTP(w, req)
 
@@ -89,7 +90,7 @@ func TestStartAndShutdown(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.Start(); err != nil && err != http.ErrServerClosed {
+		if err := s.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Start(): %v", err)
 		}
 	}()
@@ -125,7 +126,7 @@ func TestStartRejectsDoubleStart(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.Start(); err != nil && err != http.ErrServerClosed {
+		if err := s.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("first Start(): %v", err)
 		}
 	}()

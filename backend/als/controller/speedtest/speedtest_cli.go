@@ -12,9 +12,13 @@ import (
 )
 
 func HandleSpeedtestDotNet(c *gin.Context) {
-	nodeId, ok := c.GetQuery("node_id")
 	v, _ := c.Get("clientSession")
-	clientSession := v.(*client.ClientSession)
+	clientSession, ok := client.SessionFromContext(v)
+	if !ok {
+		c.JSON(500, &gin.H{"success": false, "error": "Invalid session"})
+		return
+	}
+	nodeId, ok := c.GetQuery("node_id")
 	if !ok {
 		nodeId = ""
 	}

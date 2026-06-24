@@ -35,13 +35,13 @@ func LoadFromEnv() {
 	}
 
 	for envVar, configField := range envVarsString {
-		if v := os.Getenv(envVar); len(v) != 0 {
+		if v := os.Getenv(envVar); v != "" {
 			*configField = v
 		}
 	}
 
 	for envVar, configField := range envVarsInt {
-		if v := os.Getenv(envVar); len(v) != 0 {
+		if v := os.Getenv(envVar); v != "" {
 			v, err := strconv.Atoi(v)
 			if err != nil {
 				continue
@@ -51,12 +51,12 @@ func LoadFromEnv() {
 	}
 
 	for envVar, configField := range envVarsBool {
-		if v := os.Getenv(envVar); len(v) != 0 {
+		if v := os.Getenv(envVar); v != "" {
 			*configField = v == "true"
 		}
 	}
 
-	if v := os.Getenv("SPEEDTEST_FILE_LIST"); len(v) != 0 {
+	if v := os.Getenv("SPEEDTEST_FILE_LIST"); v != "" {
 		fileLists := strings.Split(v, " ")
 		Config.SpeedtestFileList = fileLists
 	}

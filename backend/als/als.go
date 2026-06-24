@@ -57,7 +57,9 @@ func Init() {
 		}
 	}()
 
-	aHttp.Start()
+	if err := aHttp.Start(); err != nil {
+		log.Default().Printf("Server failed to start: %v", err)
+	}
 }
 
 // cleanupExpiredClients polls every cleanupInterval (default 1h) and

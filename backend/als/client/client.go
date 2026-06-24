@@ -69,6 +69,19 @@ func (c *ClientSession) TrySend(msg *Message) bool {
 	}
 }
 
+// SessionFromContext extracts the ClientSession previously stored under
+// the "clientSession" key by the session middleware. It returns the
+// session and true on success, or (nil, false) if the value is missing
+// or has an unexpected type. Callers should treat the false case as a
+// programming error (middleware not installed) and return 500.
+func SessionFromContext(v any) (*ClientSession, bool) {
+	if v == nil {
+		return nil, false
+	}
+	s, ok := v.(*ClientSession)
+	return s, ok
+}
+
 func AddClient(id string, session *ClientSession) {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
@@ -124,7 +137,7 @@ func SnapshotClients() []*ClientSession {
 	return list
 }
 
-func BroadCastMessage(name string, content string) {
+func BroadCastMessage(name, content string) {
 	msg := &Message{
 		Name:    name,
 		Content: content,

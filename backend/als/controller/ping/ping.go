@@ -9,9 +9,13 @@ import (
 )
 
 func Handle(c *gin.Context) {
-	ip, ok := c.GetQuery("ip")
 	v, _ := c.Get("clientSession")
-	clientSession := v.(*client.ClientSession)
+	clientSession, ok := client.SessionFromContext(v)
+	if !ok {
+		c.JSON(500, &gin.H{"success": false, "error": "Invalid session"})
+		return
+	}
+	ip, ok := c.GetQuery("ip")
 	if !ok {
 		c.JSON(400, &gin.H{
 			"success": false,
@@ -47,8 +51,13 @@ func Handle(c *gin.Context) {
 	// caller -- defer its cancel to release the watcher goroutine
 	// inside GetContext promptly when the client disconnects.
 	go func() {
-		defer func() { _ = recover() }()
-		p.Start(ctx)
+		// Swallow panics from the pinger: the SSE consumer is gone
+		// by the time ctx is cancelled, and a panic on the cleanup
+		// path would crash the whole process.
+		func() {
+			defer func() { _ = recover() }()
+			p.Start(ctx)
+		}()
 	}()
 
 	c.JSON(200, &gin.H{

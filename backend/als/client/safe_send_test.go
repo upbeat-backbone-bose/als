@@ -112,8 +112,7 @@ func TestSafeChannelSendClientSession(t *testing.T) {
 	t.Parallel()
 
 	session := &ClientSession{
-		Channel:   make(chan *Message, 1),
-		CreatedAt: time.Now(),
+		Channel: make(chan *Message, 1),
 	}
 	if !SafeChannelSend(context.Background(), session.Channel, &Message{Name: "hello"}) {
 		t.Fatal("first send should succeed")

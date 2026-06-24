@@ -88,7 +88,7 @@ func TestHandleDownloadDataIsRandom(t *testing.T) {
 	r := gin.New()
 	r.GET("/download", HandleDownload)
 
-	req := httptest.NewRequest(http.MethodGet, "/download?ckSize=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/download?ckSize=1", http.NoBody)
 	w1 := httptest.NewRecorder()
 	r.ServeHTTP(w1, req)
 
@@ -181,7 +181,7 @@ func TestHandleDownloadResponseContentType(t *testing.T) {
 	r := gin.New()
 	r.GET("/download", HandleDownload)
 
-	req := httptest.NewRequest(http.MethodGet, "/download", nil)
+	req := httptest.NewRequest(http.MethodGet, "/download", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -198,7 +198,7 @@ func BenchmarkHandleDownload(b *testing.B) {
 	r := gin.New()
 	r.GET("/download", HandleDownload)
 
-	req := httptest.NewRequest(http.MethodGet, "/download?ckSize=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/download?ckSize=1", http.NoBody)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -232,7 +232,7 @@ func TestHandleDownloadNoChunks(t *testing.T) {
 	r := gin.New()
 	r.GET("/download", HandleDownload)
 
-	req := httptest.NewRequest(http.MethodGet, "/download", nil)
+	req := httptest.NewRequest(http.MethodGet, "/download", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

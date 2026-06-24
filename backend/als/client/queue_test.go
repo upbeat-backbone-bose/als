@@ -34,12 +34,13 @@ func resetQueueForTest(t *testing.T) {
 }
 
 // startHandler launches an isolated HandleQueue goroutine bound to a
-// cancellable context. The goroutine exits when ctx is cancelled, so
-// tests can run independently without sharing a long-lived handler.
+// cancellable context. The goroutine exits when the returned stop
+// function is called, so tests can run independently without sharing a
+// long-lived handler.
 //
-// Returns (handlerCtx, stop). The handler is guaranteed to be parked in
-// its outer select on <-queueWakeup before startHandler returns.
-func startHandler(t *testing.T) (handlerCtx context.Context, stop func()) {
+// The handler is guaranteed to be parked in its outer select on
+// <-queueWakeup before startHandler returns.
+func startHandler(t *testing.T) (stop func()) {
 	t.Helper()
 	handlerCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -65,7 +66,7 @@ func startHandler(t *testing.T) (handlerCtx context.Context, stop func()) {
 		t.Fatal("HandleQueue never reached <-queueWakeup within 2s")
 	}
 
-	return handlerCtx, func() {
+	return func() {
 		cancel()
 		select {
 		case <-done:
@@ -104,7 +105,7 @@ func awaitEnqueued(t *testing.T, ctx context.Context) {
 
 func TestHandleQueueFIFO(t *testing.T) {
 	resetQueueForTest(t)
-	_, stop := startHandler(t)
+	stop := startHandler(t)
 	defer stop()
 
 	// We enqueue one entry, let the handler fully process it (notify +
@@ -170,7 +171,7 @@ func TestHandleQueueFIFO(t *testing.T) {
 
 func TestHandleQueueSkipsAlreadyDoneHead(t *testing.T) {
 	resetQueueForTest(t)
-	_, stop := startHandler(t)
+	stop := startHandler(t)
 	defer stop()
 
 	var calls atomic.Int32
@@ -236,7 +237,7 @@ func TestWaitQueueReturnsWhenCallerCtxCancelled(t *testing.T) {
 
 func TestHandleQueueExitsOnCtxCancel(t *testing.T) {
 	resetQueueForTest(t)
-	_, stop := startHandler(t)
+	stop := startHandler(t)
 
 	// No entries enqueued: the handler is parked in its outer
 	// <-queueWakeup select. Cancelling its ctx must let it exit
@@ -259,7 +260,7 @@ func TestHandleQueueExitsOnCtxCancel(t *testing.T) {
 // notify in a goroutine and bound its wait during shutdown.
 func TestHandleQueueGracefulShutdownFromOuter(t *testing.T) {
 	resetQueueForTest(t)
-	_, stop := startHandler(t)
+	stop := startHandler(t)
 	defer stop()
 
 	// All callers park with non-blocking notifies (cb returns immediately)
@@ -335,7 +336,7 @@ func TestGetQueuePosition(t *testing.T) {
 	}{
 		{"first entry", ctx1, 1, 2},
 		{"second entry", ctx2, 2, 2},
-		{"unknown ctx returns zeros", context.Background(), 0, 0},
+		{"unknown ctx returns pos=0 but total=2", context.Background(), 0, 2},
 	}
 
 	for _, tt := range tests {

@@ -48,21 +48,22 @@ func defineMenuCommands() console.Commands {
 		}
 
 		for command, feature := range features {
-			if feature {
-				_, err := exec.LookPath(command)
-				if err != nil {
-					if !showedIsFirstTime {
-						fmt.Println("Error: " + command + " is not installed")
-					}
-					hasNotFound = true
-					continue
-				}
-				filter, ok := argsFilter[command]
-				if !ok {
-					filter = argsPassthough
-				}
-				commands.AddExecutableAsCommand(rootCmd, command, filter)
+			if !feature {
+				continue
 			}
+			_, err := exec.LookPath(command)
+			if err != nil {
+				if !showedIsFirstTime {
+					fmt.Println("Error: " + command + " is not installed")
+				}
+				hasNotFound = true
+				continue
+			}
+			filter, ok := argsFilter[command]
+			if !ok {
+				filter = argsPassthough
+			}
+			commands.AddExecutableAsCommand(rootCmd, command, filter)
 		}
 
 		if hasNotFound {

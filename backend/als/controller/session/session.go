@@ -59,24 +59,24 @@ func buildClientConfig(cfg *config.ALSConfig, clientIP string) ClientConfig {
 var configGetter = func() *config.ALSConfig { return config.Config }
 
 func Handle(c *gin.Context) {
-	uuid := uuid.New().String()
+	sessionID := uuid.New().String()
 	channel := make(chan *client.Message, 64)
 	clientSession := &client.ClientSession{
 		Channel:   channel,
 		CreatedAt: time.Now(),
 	}
-	client.AddClient(uuid, clientSession)
+	client.AddClient(sessionID, clientSession)
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	clientSession.SetContext(ctx)
 	defer func() {
 		cancel()
-		client.RemoveClient(uuid)
+		client.RemoveClient(sessionID)
 	}()
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
-	c.SSEvent("SessionId", uuid)
+	c.SSEvent("SessionId", sessionID)
 
 	clientCfg := buildClientConfig(configGetter(), c.ClientIP())
 	configJson, err := json.Marshal(clientCfg)

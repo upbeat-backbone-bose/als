@@ -2,6 +2,7 @@ package als
 
 import (
 	"io/fs"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,7 +10,7 @@ import (
 	"github.com/samlm0/als/v2/als/controller/cache"
 	"github.com/samlm0/als/v2/als/controller/iperf3"
 	"github.com/samlm0/als/v2/als/controller/ping"
-	"github.com/samlm0/als/v2/als/controller/session"
+	sessionCtrl "github.com/samlm0/als/v2/als/controller/session"
 	"github.com/samlm0/als/v2/als/controller/shell"
 	"github.com/samlm0/als/v2/als/controller/speedtest"
 	"github.com/samlm0/als/v2/config"
@@ -17,43 +18,37 @@ import (
 )
 
 func SetupHttpRoute(e *gin.Engine) {
-	e.GET("/session", session.Handle)
+	e.GET("/session", sessionCtrl.Handle)
 	v1 := e.Group("/method", controller.MiddlewareSessionOnHeader())
-	{
-		if config.Config.FeatureIperf3 {
-			v1.GET("/iperf3/server", iperf3.Handle)
-		}
-
-		if config.Config.FeaturePing {
-			v1.GET("/ping", ping.Handle)
-		}
-
-		if config.Config.FeatureSpeedtestDotNet {
-			v1.GET("/speedtest_dot_net", speedtest.HandleSpeedtestDotNet)
-		}
-
-		if config.Config.FeatureIfaceTraffic {
-			v1.GET("/cache/interfaces", cache.UpdateInterfaceCache)
-		}
+	if config.Config.FeatureIperf3 {
+		v1.GET("/iperf3/server", iperf3.Handle)
 	}
 
-	session := e.Group("/session/:session", controller.MiddlewareSessionOnUrl())
-	{
-		if config.Config.FeatureShell {
-			session.GET("/shell", shell.HandleNewShell)
-		}
+	if config.Config.FeaturePing {
+		v1.GET("/ping", ping.Handle)
 	}
 
-	speedtestRoute := session.Group("/speedtest", controller.MiddlewareSessionOnUrl())
-	{
-		if config.Config.FeatureFileSpeedtest {
-			speedtestRoute.GET("/file/:filename", speedtest.HandleFakeFile)
-		}
+	if config.Config.FeatureSpeedtestDotNet {
+		v1.GET("/speedtest_dot_net", speedtest.HandleSpeedtestDotNet)
+	}
 
-		if config.Config.FeatureLibrespeed {
-			speedtestRoute.GET("/download", speedtest.HandleDownload)
-			speedtestRoute.POST("/upload", speedtest.HandleUpload)
-		}
+	if config.Config.FeatureIfaceTraffic {
+		v1.GET("/cache/interfaces", cache.UpdateInterfaceCache)
+	}
+
+	sessionRoute := e.Group("/session/:session", controller.MiddlewareSessionOnUrl())
+	if config.Config.FeatureShell {
+		sessionRoute.GET("/shell", shell.HandleNewShell)
+	}
+
+	speedtestRoute := sessionRoute.Group("/speedtest", controller.MiddlewareSessionOnUrl())
+	if config.Config.FeatureFileSpeedtest {
+		speedtestRoute.GET("/file/:filename", speedtest.HandleFakeFile)
+	}
+
+	if config.Config.FeatureLibrespeed {
+		speedtestRoute.GET("/download", speedtest.HandleDownload)
+		speedtestRoute.POST("/upload", speedtest.HandleUpload)
 	}
 
 	e.Any("/assets/:filename", func(c *gin.Context) {
@@ -79,9 +74,15 @@ func SetupHttpRoute(e *gin.Engine) {
 
 func handleStatisFile(filePath string, c *gin.Context) {
 	uiFs := iEmbed.UIStaticFiles
-	subFs, _ := fs.Sub(uiFs, "ui")
+	subFs, err := fs.Sub(uiFs, "ui")
+	if err != nil {
+		log.Default().Printf("static fs sub failed: %v", err)
+		c.String(500, "Internal server error")
+		c.Abort()
+		return
+	}
 	httpFs := http.FileServer(http.FS(subFs))
-	_, err := fs.ReadFile(subFs, filePath)
+	_, err = fs.ReadFile(subFs, filePath)
 	if err != nil {
 		c.String(404, "Not found")
 		c.Abort()

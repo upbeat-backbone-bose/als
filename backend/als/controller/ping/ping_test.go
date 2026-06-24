@@ -25,7 +25,7 @@ func TestHandleMissingIP(t *testing.T) {
 	})
 	r.GET("/ping", Handle)
 
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ping", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -48,7 +48,7 @@ func TestHandleInvalidIP(t *testing.T) {
 	})
 	r.GET("/ping", Handle)
 
-	req := httptest.NewRequest(http.MethodGet, "/ping?ip=invalid", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ping?ip=invalid", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -75,12 +75,29 @@ func TestHandleValidIPReturnsOK(t *testing.T) {
 	})
 	r.GET("/ping", Handle)
 
-	req := httptest.NewRequest(http.MethodGet, "/ping?ip=127.0.0.1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ping?ip=127.0.0.1", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	// Handler returns 200 immediately; ping runs asynchronously.
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d; want 200", w.Code)
+	}
+}
+
+// TestHandleMissingSession covers the 500 path when no clientSession
+// is set on the gin context (middleware not installed).
+func TestHandleMissingSession(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.GET("/ping", Handle)
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", http.NoBody)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d; want 500; body = %s", w.Code, w.Body.String())
 	}
 }

@@ -88,7 +88,7 @@ func TestHandleFakeFileInvalidFilename(t *testing.T) {
 	r := gin.New()
 	r.GET("/file/:filename", HandleFakeFile)
 
-	req := httptest.NewRequest(http.MethodGet, "/file/not-a-fake.txt", nil)
+	req := httptest.NewRequest(http.MethodGet, "/file/not-a-fake.txt", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -114,7 +114,7 @@ func TestHandleFakeFileNotInAllowlist(t *testing.T) {
 	r := gin.New()
 	r.GET("/file/:filename", HandleFakeFile)
 
-	req := httptest.NewRequest(http.MethodGet, "/file/100GB.test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/file/100GB.test", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

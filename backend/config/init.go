@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"io"
 	"log"
 	"net/http"
@@ -109,18 +110,21 @@ func LoadSponsorMessage() {
 	}
 
 	httpClient := &http.Client{Timeout: 5 * time.Second}
-	resp, err := httpClient.Get(Config.SponsorMessage)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, Config.SponsorMessage, http.NoBody)
 	if err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			log.Default().Println("ERROR: Failed to load sponsor message.")
-			return
-		}
-		content, err := io.ReadAll(resp.Body)
+		resp, err := httpClient.Do(req)
 		if err == nil {
-			log.Default().Println("Loaded sponsor message from url.")
-			Config.SponsorMessage = string(content)
-			return
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				log.Default().Println("ERROR: Failed to load sponsor message.")
+				return
+			}
+			content, err := io.ReadAll(resp.Body)
+			if err == nil {
+				log.Default().Println("Loaded sponsor message from url.")
+				Config.SponsorMessage = string(content)
+				return
+			}
 		}
 	}
 

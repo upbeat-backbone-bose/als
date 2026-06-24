@@ -56,7 +56,7 @@ func TestUpdateInterfaceCacheSendsToChannel(t *testing.T) {
 		UpdateInterfaceCache(c)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/cache/interfaces", nil)
+	req := httptest.NewRequest(http.MethodGet, "/cache/interfaces", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -104,7 +104,7 @@ func TestUpdateInterfaceCacheEmptyCache(t *testing.T) {
 		UpdateInterfaceCache(c)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/cache/interfaces", nil)
+	req := httptest.NewRequest(http.MethodGet, "/cache/interfaces", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -160,5 +160,22 @@ func TestUpdateInterfaceCacheReturns503WhenClientSlow(t *testing.T) {
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("status = %d; want 503; body = %s", w.Code, w.Body.String())
+	}
+}
+
+// TestUpdateInterfaceCacheMissingSession covers the 500 path when the
+// clientSession is not set on the gin context (middleware missing).
+func TestUpdateInterfaceCacheMissingSession(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.GET("/cache/interfaces", UpdateInterfaceCache)
+
+	req := httptest.NewRequest(http.MethodGet, "/cache/interfaces", http.NoBody)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d; want 500; body = %s", w.Code, w.Body.String())
 	}
 }

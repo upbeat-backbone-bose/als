@@ -6,6 +6,8 @@ import (
 )
 
 func TestSizeToBytes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		input   string
@@ -69,6 +71,8 @@ func TestSizeToBytes(t *testing.T) {
 }
 
 func TestContains(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		slice []string
