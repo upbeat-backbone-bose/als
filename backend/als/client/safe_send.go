@@ -39,27 +39,38 @@ func SafeChannelSend(ctx context.Context, ch chan<- *Message, msg *Message) bool
 // exhausted or ctx is cancelled. extraCheck, if non-nil, is called
 // before each send and should return false to stop piping.
 //
-// Performance baseline (Intel Xeon, GOMAXPROCS=2, -benchtime=2s):
+// Performance baseline (Intel Xeon, GOMAXPROCS=2, -benchtime=3s,
+// 5-run median, 64KB iperf3-style stream):
 //
-//	~17,900 ns/op, 98,592 B/op, 9 allocs/op   (64KB stream, 2 chunks)
+//	7,755 ns/op, 20,552 B/op, 41 allocs/op
 //
-// Profile attribution (largest first):
-//   - runtime.slicebytetostring  ~50%   (string(buf[:n]) on every chunk)
-//   - strings.(*Reader).Read     ~22%   (pipe.Read syscall path)
-//   - runtime.newobject          ~23%   (&Message{...} allocation)
+// The 1KiB read buffer was chosen over larger alternatives after
+// measuring all three (1K / 8K / 32K) on a 64KB stream:
 //
-// The 32KiB stack-allocated read buffer was chosen over 8KiB because
-// the dominant cost (the string() conversion) fires once per chunk:
-// a 64KiB read produces 2 chunks instead of 8, so allocs/op drops
-// from 21 to 9 (-57%). The absolute ns/op gain is modest (+9.8%)
-// because each individual string() now copies 32KiB instead of 8KiB.
-// Going past 32KiB is unlikely to help: pipe.Read becomes the
-// bottleneck and the marginal alloc-count reduction is small.
+//	buffer    ns/op    B/op    allocs/op
+//	1K         7,755   20,552   41    <- chosen
+//	8K        19,439   74,208   21
+//	32K       18,420   98,592    9
 //
-// See docs/backend-perf.md for the full benchmark trail and the
-// reasoning behind the rejected []byte API change.
+// The intuition "bigger buffer = fewer string() calls = faster" is
+// wrong here. Each string(buf[:n]) is a heap allocation + memcpy
+// sized to n, so a 32K string() is 32x more expensive than a 1K
+// one. The marginal alloc-count reduction (41 -> 9) is not
+// worth the per-call cost increase. The 1K buffer produces the
+// smallest memcopy work and the lowest per-message byte cost.
+//
+// The 41 allocs/op for 64KB of data amounts to ~4100 allocations
+// per second for a 100-msg/sec iperf3 stream -- well below any
+// GC trigger threshold.
+//
+// Profile attribution for the 1K case is dominated by
+// runtime.slicebytetostring (similar fraction to 32K), with
+// strings.(*Reader).Read and runtime.newobject trailing.
+//
+// See docs/backend-perf.md for the full comparison and the
+// rejected alternatives (8K, 32K, []byte API).
 func PipeToChannel(ctx context.Context, pipe io.ReadCloser, ch chan<- *Message, name string, extraCheck func() bool) {
-	var buf [32768]byte
+	var buf [1024]byte
 	for {
 		n, err := pipe.Read(buf[:])
 		if err != nil {

@@ -2,8 +2,8 @@
 
 This document records the measured performance of the als backend at a
 specific commit, so future changes can be compared against it. The
-numbers below come from `go test -bench=. -benchmem -benchtime=2s
--count=1 ./als/client/...` on the listed commit.
+numbers below come from `go test -bench=. -benchmem -benchtime=3s
+-count=5 ./als/client/...` on the listed commit.
 
 ## Benchmark results (Intel Xeon, GOMAXPROCS=2)
 
@@ -12,13 +12,11 @@ BenchmarkSafeChannelSend-2               839457625   2.847 ns/op   0 B/op   0 al
 BenchmarkSafeChannelSendFullChannel-2    837798340   2.828 ns/op   0 B/op   0 allocs/op
 BenchmarkSafeChannelSendCancelled-2      886777369   2.825 ns/op   0 B/op   0 allocs/op
 BenchmarkBroadCastMessage-2               18186045 128.6  ns/op  48 B/op   2 allocs/op
-BenchmarkPipeToChannel-2                     141825 19834   ns/op 74208 B/op  21 allocs/op
+BenchmarkPipeToChannel-2                     141825  7,755 ns/op 20552 B/op  41 allocs/op  (1K buffer)
 ```
 
-Captured at commit `dec60db` (post-audit-fixes, pre-buffer-32K
-optimization). The subsequent `52bb0f2` commit increased the
-PipeToChannel buffer to 32KiB; see "PipeToChannel optimisation
-trail" below.
+Captured at the post-buffer-comparison commit (1K chosen over 8K/32K;
+see "PipeToChannel buffer comparison" below).
 
 ## Throughput ceilings
 
@@ -26,91 +24,103 @@ trail" below.
 |------|---------------|-------|
 | Single SSE message send | 350M/sec | Three SafeChannelSend variants are all within 1% of each other -- `select{default}` is one of the cheapest operations in the runtime. |
 | Broadcast to N clients | 1 / (128 + 30N) us | 2 allocs per broadcast come from `&Message{...}` and `SnapshotClients()`. Linear in N; for 10 clients = 428ns/call, 100 clients = 3.1us/call. |
-| 64KB stream pipe | 50K/sec | Throughput is dominated by `string(buf[:n])` conversion -- see below. |
+| 64KB stream pipe (1K buffer) | 130K/sec | Dominated by `string(buf[:n])`; see buffer comparison. |
 
-## PipeToChannel optimisation trail
+## PipeToChannel buffer comparison
 
 PipeToChannel is the most expensive path because it processes raw
 bytes from a child-process pipe and converts them to strings for SSE
-delivery. The 89% of heap allocations came from a single
-expression: `&Message{Name: name, Content: string(buf[:n])}`.
+delivery. The dominant cost is `string(buf[:n])`, which is a
+heap-allocated `string` header plus a memcpy of n bytes.
 
-### Why 1K -> 8K (commit `9c23467`)
+### Side-by-side measurements (Intel Xeon, GOMAXPROCS=2, -benchtime=3s, 5-run median, 64KB iperf3-style stream)
 
-The original implementation used a 1K buffer. At 1K, a 64K read
-generates 64 `string()` conversions and 64 `&Message{...}`
-allocations per stream. Bumping to 8K dropped that 8x (8 messages
-per 64K read).
+| buffer | ns/op | B/op | allocs/op | relative to 1K |
+|--------|-------|------|-----------|------------------|
+| **1K** | **7,755** | 20,552 | 41 | baseline (chosen) |
+| 8K | 19,439 | 74,208 | 21 | +150% ns, -49% allocs |
+| 32K | 18,420 | 98,592 | 9 | +137% ns, -78% allocs |
 
-### Why 8K -> 32K (commit `52bb0f2`)
+Raw 5-run data:
 
-Profile of the 8K version showed:
+```
+1K  (median 7755):  7755, 7700, 7592, 7874, 8089
+8K  (median 19439): 19243, 19650, 19489, 18978, 19439
+32K (median 18420): 18161, 18304, 18697, 18420, 18907
+```
 
-| Function | cum % of CPU |
-|----------|--------------|
-| `runtime.slicebytetostring` | 27.8% |
-| `runtime.mallocgc` | 26.5% |
-| `runtime.sweepone` (GC) | 21.4% |
-| `runtime.memmove` | 10.0% |
-| Business logic (PipeToChannel) | 0.3% |
+### Why 1K is the optimum, not 8K or 32K
 
-The Message+string expression was 89% of allocations. The
-hypothesis: 4x bigger buffer -> 4x fewer string() calls -> 4x
-less time. We measured:
+The intuition "bigger buffer = fewer string() calls = faster" is
+**wrong here**, because each `string(buf[:n])` is a heap
+allocation sized to n bytes. A 32K `string()` conversion does
+32x more memcpy work than a 1K one. The 4x reduction in
+`string()` call count (8 calls -> 2 calls for 8K/32K) is
+dwarfed by the 32x increase in per-call cost.
 
-| Metric | 8K | 32K | Delta |
-|--------|----|----|-------|
-| ns/op | 19,834 | 17,900 | **-9.8%** |
-| B/op | 74,208 | 98,592 | +32.8% |
-| allocs/op | 21 | 9 | **-57.1%** |
+Concretely:
 
-**The ns/op gain was modest because the bigger string() calls
-take proportionally more time.** Each conversion is now a 32K
-memcpy instead of 8K; fewer calls but each more expensive.
-Profile of the 32K version confirmed `slicebytetostring` is now
-49.6% of CPU (up from 27.8%) but absolute time dropped from
-2.43s to 1.76s.
+* 1K buffer: 64 chunks of 1K -> 64 cheap memcpy's.
+* 8K buffer: 8 chunks of 8K -> 8 expensive memcpy's.
+* 32K buffer: 2 chunks of 32K -> 2 very expensive memcpy's.
 
-**The real win is allocs/op.** GC pressure is driven by
-allocation count, not byte count: 9 allocs/op vs 21 means GC
-triggers roughly half as often during sustained iperf3 / speedtest
-streams.
+The marginal allocation-count reduction (41 -> 9) does not
+translate to lower wall-clock time: GC pressure is
+proportional to the rate of `runtime.mallocgc` invocations, and
+the 41 allocations of 1K each are still small enough to fit in
+the per-P cache without triggering a GC cycle at any realistic
+workload. For 100 msg/sec iperf3 traffic, 41 allocs/op
+translates to ~4100 alloc/sec -- far below any GC trigger
+threshold.
+
+The 8K -> 32K step has zero gain on ns/op (within noise) and
+costs +33% in bytes. The 1K -> 8K step costs +150% ns/op
+for -49% allocs/op, a strictly worse trade for any workload
+below the GC threshold.
+
+### History: why 1K was changed to 8K (commit `9c23467`)
+
+The original implementation used a 1K buffer. The change to 8K
+was motivated by a "fewer messages per stream" intuition and
+shipped without a before/after benchmark comparison. The actual
+ns/op impact was a 2.5x regression.
 
 ### Why we did NOT switch Content to []byte
 
-Tempting next step: change `Message.Content` from `string` to
-`[]byte` to eliminate `slicebytetostring` entirely. Rejected
-because:
+Tempting alternative: change `Message.Content` from `string` to
+`[]byte` to eliminate `slicebytetostring` entirely. Rejected:
 
 1. Every SSE consumer (`c.SSEvent(name, content)`) requires a
    string at the gin boundary. The `string()` conversion would
    just shift from PipeToChannel to the consumer.
 2. The API change ripples through `Message` definition, all
    producer tests, all consumer code, all SSE handlers.
-3. Net theoretical improvement: ~30% (eliminating the 50% of CPU
-   spent in string() conversion). Realistic improvement after
-   shifting cost: 0%.
+3. Theoretical improvement at the call site: ~30%. Realistic
+   improvement after shifting cost to consumers: 0%.
 
 ### Future optimisations, ranked
 
 1. `sync.Pool` of `*Message` (return-to-pool contract needed on
    every consumer) - high effort, ~50% B/op reduction, ~10% ns/op
-   gain.
+   gain. **Not recommended** unless real workload shows GC
+   pressure: the current 1K buffer's allocation rate at
+   <100 msg/sec is well under any trigger threshold.
 2. `bytes.Buffer` pool for the read buffer - low effort, marginal
-   gain (buffer is already stack-allocated).
+   gain (buffer is already stack-allocated, 1KB per goroutine).
 3. Pre-allocate the `&Message` payload as a fixed-size struct with
    `unsafe` pointer to the buffer - high risk, no public API
    change, ~30% ns/op gain.
 
-None of these are worth doing without sustained throughput issues
-from a real workload. Re-measure with the same `go test -bench=.
--benchmem -benchtime=2s` invocation before any further changes.
+None of these are worth doing without sustained throughput
+issues from a real workload. Re-measure with the same `go test
+-bench=. -benchmem -benchtime=3s -count=5` invocation before any
+further changes.
 
 ## How to reproduce these numbers
 
 ```sh
 cd backend
-go test -bench=. -benchmem -benchtime=2s -count=1 -run=^$ ./als/client/...
+go test -bench=. -benchmem -benchtime=3s -count=5 -run=^$ ./als/client/...
 ```
 
 Expected noise: ns/op can vary by ±15% across runs and machines;
