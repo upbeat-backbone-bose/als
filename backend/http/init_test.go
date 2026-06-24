@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -141,9 +142,41 @@ func TestStartRejectsDoubleStart(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	if err := s.Start(); err == nil {
+	// Capture the first server reference so we can verify it is not
+	// replaced by a subsequent double-Start attempt.
+	s.mu.Lock()
+	first := s.httpServer
+	s.mu.Unlock()
+	if first == nil {
+		t.Fatal("httpServer not set after first Start")
+	}
+
+	// Second Start must return an error and must NOT replace first.
+	err := s.Start()
+	if err == nil {
 		t.Fatal("second Start() returned nil; want error")
 	}
+	if !strings.Contains(err.Error(), "already started") {
+		t.Errorf("second Start() error = %q; want it to contain %q", err.Error(), "already started")
+	}
+	s.mu.Lock()
+	if s.httpServer != first {
+		t.Error("second Start() replaced the first http.Server reference")
+	}
+	s.mu.Unlock()
+
+	// Multiple consecutive double-Start attempts must all fail
+	// consistently, not just the first one.
+	for i := 0; i < 3; i++ {
+		if err := s.Start(); err == nil {
+			t.Errorf("attempt %d: double Start() returned nil; want error", i)
+		}
+	}
+	s.mu.Lock()
+	if s.httpServer != first {
+		t.Error("repeated double Start() replaced the first http.Server reference")
+	}
+	s.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

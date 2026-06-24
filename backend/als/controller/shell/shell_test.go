@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 // TestCheckOriginCurrentBehavior documents the present (buggy) policy so
@@ -127,5 +129,28 @@ func TestCheckOriginReturnsFalseOnInvalidURL(t *testing.T) {
 				t.Errorf("checkOrigin(%q) = true; want false", origin)
 			}
 		})
+	}
+}
+
+// TestHandleNewShellMissingSession covers the 500 path when no
+// clientSession is set on the gin context. Previously the handler
+// would have nil-pointer-dereferenced on the unchecked type
+// assertion v.(*client.ClientSession).
+func TestHandleNewShellMissingSession(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.GET("/shell", HandleNewShell)
+
+	req := httptest.NewRequest(http.MethodGet, "/shell", http.NoBody)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// The handler closes the websocket (which never opened) and
+	// returns without writing any HTTP response. We assert that the
+	// call did not panic and that no 200 was emitted.
+	if w.Code == http.StatusOK {
+		t.Errorf("got 200; handler should not produce 200 without a session")
 	}
 }

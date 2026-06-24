@@ -108,3 +108,53 @@ func BenchmarkPipeToChannel(b *testing.B) {
 		}
 	}
 }
+
+// TestPipeToChannelSignalsDoneAfterDrain pins the contract that
+// `done` closes only after the goroutine has finished draining the
+// pipe and sending every read chunk. This guards against a
+// regression where the goroutine leaks and the done channel is
+// closed prematurely (before all bytes are read or sent), which
+// would silently lose messages in production.
+func TestPipeToChannelSignalsDoneAfterDrain(t *testing.T) {
+	t.Parallel()
+
+	ch := make(chan *Message, 16)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 16K data with an 8K buffer -> exactly 2 messages must be
+	// delivered. Use 'a' so each chunk is distinguishable from
+	// other tests that share the channel name.
+	data := strings.Repeat("a", 16384)
+	pipe := io.NopCloser(strings.NewReader(data))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		PipeToChannel(ctx, pipe, ch, "evt", nil)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("PipeToChannel did not signal done within 2s")
+	}
+
+	// After done fires, every chunk the goroutine read from the
+	// pipe must have been written to ch. Drain the channel and
+	// assert the total content.
+	var got strings.Builder
+drain:
+	for {
+		select {
+		case msg := <-ch:
+			got.WriteString(msg.Content)
+		default:
+			break drain
+		}
+	}
+
+	if got.String() != data {
+		t.Errorf("got %d bytes; want %d", got.Len(), len(data))
+	}
+}

@@ -285,15 +285,20 @@ func TestClientsMuExposesInternalMutex(t *testing.T) {
 func TestSessionFromContext(t *testing.T) {
 	t.Parallel()
 
+	session := &ClientSession{Channel: make(chan *Message, 1)}
+
 	tests := []struct {
-		name   string
-		in     any
-		wantOK bool
+		name     string
+		in       any
+		wantOK   bool
+		wantSame bool // when ok, the returned session must be the same pointer
 	}{
-		{name: "nil input", in: nil, wantOK: false},
-		{name: "wrong type", in: "not a session", wantOK: false},
-		{name: "int input", in: 42, wantOK: false},
-		{name: "valid session", in: &ClientSession{}, wantOK: true},
+		{name: "nil input", in: nil, wantOK: false, wantSame: false},
+		{name: "wrong type: string", in: "not a session", wantOK: false, wantSame: false},
+		{name: "wrong type: int", in: 42, wantOK: false, wantSame: false},
+		{name: "wrong type: struct", in: struct{}{}, wantOK: false, wantSame: false},
+		{name: "wrong type: pointer to other struct", in: &struct{}{}, wantOK: false, wantSame: false},
+		{name: "valid session", in: session, wantOK: true, wantSame: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -305,6 +310,32 @@ func TestSessionFromContext(t *testing.T) {
 			if ok && got == nil {
 				t.Error("ok but got nil session")
 			}
+			if tt.wantSame && got != session {
+				t.Errorf("got %p; want %p (identity lost)", got, session)
+			}
 		})
+	}
+}
+
+// TestSessionFromContextRejectsRelatedTypes catches accidental
+// interface matches that share a method set. ClientSession has
+// *chan*-typed fields; a *string should never satisfy *ClientSession.
+func TestSessionFromContextRejectsRelatedTypes(t *testing.T) {
+	t.Parallel()
+
+	session := &ClientSession{}
+	doublePtr := &session // **ClientSession - one level too deep
+	bad := []any{
+		"",                    // empty string
+		doublePtr,             // **ClientSession, not *ClientSession
+		struct{ X int }{X: 1}, // anonymous struct
+		make(chan int),        // unrelated channel
+		func() {},             // function value
+	}
+	for i, b := range bad {
+		got, ok := SessionFromContext(b)
+		if ok {
+			t.Errorf("case %d (%T): ok=true, got=%v; want ok=false", i, b, got)
+		}
 	}
 }

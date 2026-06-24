@@ -312,6 +312,10 @@ func TestHandleQueueGracefulShutdownFromOuter(t *testing.T) {
 func TestGetQueuePosition(t *testing.T) {
 	resetQueueForTest(t)
 
+	// Empty queue: position is 0 (nothing found) and total reflects the
+	// real queue size, which is 0 here. The previous bug returned (0, 0)
+	// for non-empty queues too, hiding the queue's actual size from the
+	// SSE consumer.
 	if pos, total := GetQueuePositionByCtx(context.Background()); pos != 0 || total != 0 {
 		t.Errorf("empty queue: got (%d, %d); want (0, 0)", pos, total)
 	}
@@ -336,7 +340,10 @@ func TestGetQueuePosition(t *testing.T) {
 	}{
 		{"first entry", ctx1, 1, 2},
 		{"second entry", ctx2, 2, 2},
-		{"unknown ctx returns pos=0 but total=2", context.Background(), 0, 2},
+		// Regression: previously returned (0, 0), hiding the queue size
+		// from the SSE consumer. Must report the real total so the UI
+		// can show the true queue depth.
+		{"unknown ctx reports real total", context.Background(), 0, 2},
 	}
 
 	for _, tt := range tests {
@@ -346,6 +353,48 @@ func TestGetQueuePosition(t *testing.T) {
 				t.Errorf("got (%d, %d); want (%d, %d)", pos, total, tt.wantPos, tt.wantTotal)
 			}
 		})
+	}
+}
+
+// TestGetQueuePositionCancelledContext pins the behaviour for a
+// context that the caller has already cancelled but the queue has
+// not yet pruned. The queue still holds the entry, so the function
+// must report the entry's 1-based position and the real total.
+func TestGetQueuePositionCancelledContext(t *testing.T) {
+	resetQueueForTest(t)
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	queueLock.Lock()
+	queueEntries = append(queueEntries, &queueEntry{ctx: cancelled})
+	queueLock.Unlock()
+
+	pos, total := GetQueuePositionByCtx(cancelled)
+	if pos != 1 || total != 1 {
+		t.Errorf("cancelled ctx in queue: got (%d, %d); want (1, 1)", pos, total)
+	}
+}
+
+// TestGetQueuePositionFirstEntryAlwaysAtOne guards against a
+// regression where FIFO ordering would be lost. The first enqueued
+// entry must always report position 1, never 0.
+func TestGetQueuePositionFirstEntryAlwaysAtOne(t *testing.T) {
+	resetQueueForTest(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	queueLock.Lock()
+	queueEntries = append(queueEntries, &queueEntry{ctx: ctx})
+	queueLock.Unlock()
+
+	pos, total := GetQueuePositionByCtx(ctx)
+	if pos != 1 {
+		t.Errorf("first entry pos = %d; want 1", pos)
+	}
+	if total != 1 {
+		t.Errorf("first entry total = %d; want 1", total)
 	}
 }
 
