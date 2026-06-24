@@ -26,6 +26,7 @@
 ### 模块文档
 
 - [后端核心模块](./backend.md) - Go 后端核心逻辑
+- [后端性能基线](./backend-perf.md) - benchmark 数值与优化轨迹
 - [前端模块](./ui.md) - Vue.js 前端界面
 - [配置模块](./config.md) - 配置加载和管理
 - [FakeShell 模块](./fakeshell.md) - 限制性 shell 实现

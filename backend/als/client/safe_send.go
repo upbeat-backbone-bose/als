@@ -39,12 +39,25 @@ func SafeChannelSend(ctx context.Context, ch chan<- *Message, msg *Message) bool
 // exhausted or ctx is cancelled. extraCheck, if non-nil, is called
 // before each send and should return false to stop piping.
 //
-// The 32KiB stack-allocated read buffer halves the per-byte overhead
-// compared to the previous 8KiB: a typical 64KiB read produces 2
-// chunks instead of 8, so the dominant cost (the
-// runtime.slicebytetostring call on every chunk) drops 4x.
-// 32KiB is comfortably stack-sized for the goroutine and not
-// unreasonable to live alongside the 16-slot channel buffer.
+// Performance baseline (Intel Xeon, GOMAXPROCS=2, -benchtime=2s):
+//
+//	~17,900 ns/op, 98,592 B/op, 9 allocs/op   (64KB stream, 2 chunks)
+//
+// Profile attribution (largest first):
+//   - runtime.slicebytetostring  ~50%   (string(buf[:n]) on every chunk)
+//   - strings.(*Reader).Read     ~22%   (pipe.Read syscall path)
+//   - runtime.newobject          ~23%   (&Message{...} allocation)
+//
+// The 32KiB stack-allocated read buffer was chosen over 8KiB because
+// the dominant cost (the string() conversion) fires once per chunk:
+// a 64KiB read produces 2 chunks instead of 8, so allocs/op drops
+// from 21 to 9 (-57%). The absolute ns/op gain is modest (+9.8%)
+// because each individual string() now copies 32KiB instead of 8KiB.
+// Going past 32KiB is unlikely to help: pipe.Read becomes the
+// bottleneck and the marginal alloc-count reduction is small.
+//
+// See docs/backend-perf.md for the full benchmark trail and the
+// reasoning behind the rejected []byte API change.
 func PipeToChannel(ctx context.Context, pipe io.ReadCloser, ch chan<- *Message, name string, extraCheck func() bool) {
 	var buf [32768]byte
 	for {

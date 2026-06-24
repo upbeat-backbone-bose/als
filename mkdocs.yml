@@ -30,6 +30,7 @@ nav:
     - "控制台": console.md
   - "模块文档":
     - "后端核心": backend.md
+    - "后端性能基线": backend-perf.md
     - "前端模块": ui.md
     - "配置模块": config.md
     - "FakeShell": fakeshell.md
