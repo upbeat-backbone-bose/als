@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"io"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,11 +30,11 @@ func TestSafeChannelSend(t *testing.T) {
 			wantSent:    false,
 		},
 		{
-			name:     "drops when ctx cancelled and channel is full",
-			capacity: 1,
+			name:        "drops when ctx cancelled and channel is full",
+			capacity:    1,
 			fillChannel: true,
-			ctxDone:  true,
-			wantSent: false,
+			ctxDone:     true,
+			wantSent:    false,
 		},
 		{
 			name:     "nil channel returns false",
@@ -116,5 +118,101 @@ func TestSafeChannelSendClientSession(t *testing.T) {
 	}
 	if SafeChannelSend(context.Background(), session.Channel, &Message{Name: "dropped"}) {
 		t.Fatal("second send should drop because channel is full")
+	}
+}
+
+func TestPipeToChannelReadsAll(t *testing.T) {
+	t.Parallel()
+
+	data := "hello world"
+	pipe := io.NopCloser(strings.NewReader(data))
+	ch := make(chan *Message, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	PipeToChannel(ctx, pipe, ch, "test", nil)
+
+	var got strings.Builder
+loop:
+	for i := 0; i < 100; i++ {
+		select {
+		case msg := <-ch:
+			got.WriteString(msg.Content)
+		case <-time.After(50 * time.Millisecond):
+			break loop
+		}
+	}
+	if got.String() != data {
+		t.Errorf("got %q; want %q", got.String(), data)
+	}
+}
+
+func TestPipeToChannelStopsOnExtraCheck(t *testing.T) {
+	t.Parallel()
+
+	data := strings.Repeat("x", 2048)
+	pipe := io.NopCloser(strings.NewReader(data))
+	ch := make(chan *Message, 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	PipeToChannel(ctx, pipe, ch, "test", func() bool { return false })
+
+	select {
+	case <-ch:
+		t.Error("no messages should be sent when extraCheck returns false")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestPipeToChannelStopsOnContextCancel(t *testing.T) {
+	t.Parallel()
+
+	pipe := io.NopCloser(strings.NewReader(strings.Repeat("x", 8192)))
+	ch := make(chan *Message, 1)
+	ch <- &Message{Name: "filler"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	PipeToChannel(ctx, pipe, ch, "test", nil)
+
+	select {
+	case msg := <-ch:
+		if msg.Name != "filler" {
+			t.Errorf("expected filler, got %q", msg.Name)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected filler in channel")
+	}
+}
+
+func TestPipeToChannelStopsWhenChannelFull(t *testing.T) {
+	t.Parallel()
+
+	data := strings.Repeat("x", 2048)
+	pipe := io.NopCloser(strings.NewReader(data))
+	ch := make(chan *Message, 1)
+	ch <- &Message{Name: "filler"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		PipeToChannel(ctx, pipe, ch, "test", nil)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("PipeToChannel did not return")
+	}
+
+	if len(ch) != 1 {
+		t.Errorf("channel should have 1 filler message, got %d", len(ch))
+	}
+	msg := <-ch
+	if msg.Name != "filler" {
+		t.Errorf("expected filler, got %q", msg.Name)
 	}
 }

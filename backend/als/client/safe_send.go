@@ -1,6 +1,9 @@
 package client
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 // SafeChannelSend writes msg to ch without blocking. Returns true on
 // success, false if the channel was full or ctx is already cancelled.
@@ -29,5 +32,25 @@ func SafeChannelSend(ctx context.Context, ch chan<- *Message, msg *Message) bool
 		return false
 	default:
 		return false
+	}
+}
+
+// PipeToChannel reads from pipe and sends each read chunk as a
+// Message with the given name to ch. It returns when the pipe is
+// exhausted or ctx is cancelled. extraCheck, if non-nil, is called
+// before each send and should return false to stop piping.
+func PipeToChannel(ctx context.Context, pipe io.ReadCloser, ch chan<- *Message, name string, extraCheck func() bool) {
+	var buf [8192]byte
+	for {
+		n, err := pipe.Read(buf[:])
+		if err != nil {
+			return
+		}
+		if extraCheck != nil && !extraCheck() {
+			return
+		}
+		if !SafeChannelSend(ctx, ch, &Message{Name: name, Content: string(buf[:n])}) {
+			return
+		}
 	}
 }

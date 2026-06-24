@@ -21,7 +21,9 @@ import (
 // checkOrigin is the policy applied to WebSocket upgrade requests.
 //
 // TODO(security) - Issue #1:
-//   https://github.com/upbeat-backbone-bose/als/issues
+//
+//	https://github.com/upbeat-backbone-bose/als/issues
+//
 // The current implementation accepts requests with an empty
 // Origin header and trusts the Host header for cross-origin comparison.
 // Both are exploitable (CSWSH and Host-header smuggling). This must be

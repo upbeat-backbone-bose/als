@@ -52,10 +52,10 @@ func TestBuildClientConfig(t *testing.T) {
 		{
 			name: "internal fields are not propagated",
 			cfg: &config.ALSConfig{
-				ListenHost:       "127.0.0.1",
-				ListenPort:       "8080",
-				Iperf3StartPort:  30000,
-				Iperf3EndPort:    31000,
+				ListenHost:      "127.0.0.1",
+				ListenPort:      "8080",
+				Iperf3StartPort: 30000,
+				Iperf3EndPort:   31000,
 			},
 			ip:   "9.9.9.9",
 			want: ClientConfig{ClientIP: "9.9.9.9"},
@@ -84,10 +84,10 @@ func TestClientConfigJSONOmitsInternalFields(t *testing.T) {
 	}
 
 	cfg := &config.ALSConfig{
-		ListenHost:      "127.0.0.1",
-		ListenPort:      "8080",
-		Iperf3StartPort: 30000,
-		Iperf3EndPort:   31000,
+		ListenHost:        "127.0.0.1",
+		ListenPort:        "8080",
+		Iperf3StartPort:   30000,
+		Iperf3EndPort:     31000,
 		SpeedtestFileList: []string{"1MB"},
 	}
 	got := buildClientConfig(cfg, "1.2.3.4")
@@ -117,21 +117,21 @@ func TestClientConfigJSONRoundTrip(t *testing.T) {
 		{
 			name: "all features on",
 			in: ClientConfig{
-				ClientIP:              "9.9.9.9",
-				Location:              "Earth",
-				PublicIPv4:            "1.2.3.4",
-				PublicIPv6:            "::1",
-				SpeedtestFileList:     []string{"1MB", "10MB"},
-				SponsorMessage:        "sponsor",
-				FeaturePing:           true,
-				FeatureShell:          true,
-				FeatureLibrespeed:     true,
-				FeatureFileSpeedtest:  true,
+				ClientIP:               "9.9.9.9",
+				Location:               "Earth",
+				PublicIPv4:             "1.2.3.4",
+				PublicIPv6:             "::1",
+				SpeedtestFileList:      []string{"1MB", "10MB"},
+				SponsorMessage:         "sponsor",
+				FeaturePing:            true,
+				FeatureShell:           true,
+				FeatureLibrespeed:      true,
+				FeatureFileSpeedtest:   true,
 				FeatureSpeedtestDotNet: true,
-				FeatureIperf3:         true,
-				FeatureMTR:            true,
-				FeatureTraceroute:     true,
-				FeatureIfaceTraffic:   true,
+				FeatureIperf3:          true,
+				FeatureMTR:             true,
+				FeatureTraceroute:      true,
+				FeatureIfaceTraffic:    true,
 			},
 		},
 	}

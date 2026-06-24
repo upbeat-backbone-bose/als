@@ -3,6 +3,9 @@ package als
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/samlm0/als/v2/als/client"
@@ -26,12 +29,29 @@ func Init() {
 
 	SetupHttpRoute(aHttp.GetEngine())
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if config.Config.FeatureIfaceTraffic {
-		go timer.SetupInterfaceBroadcast()
+		go timer.SetupInterfaceBroadcastContext(ctx)
 	}
-	go timer.UpdateSystemResource()
-	go client.HandleQueue(context.Background())
+	go timer.UpdateSystemResourceContext(ctx)
+	go client.HandleQueue(ctx)
 	go cleanupExpiredClients()
+
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+		log.Default().Println("Shutting down server...")
+		cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		if err := aHttp.Shutdown(shutdownCtx); err != nil {
+			log.Default().Printf("Server forced to shutdown: %v", err)
+		}
+	}()
+
 	aHttp.Start()
 }
 

@@ -199,6 +199,8 @@ func TestHandleEndToEndWithFakeIperf3(t *testing.T) {
 }
 
 func TestRandomPortInRange(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		min  int
@@ -227,6 +229,8 @@ func TestRandomPortInRange(t *testing.T) {
 }
 
 func TestRandomPortInvalidRange(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		min  int
@@ -249,6 +253,8 @@ func TestRandomPortInvalidRange(t *testing.T) {
 // numbers -- only that max >= min. Negative values are accepted but
 // cannot be opened. We document the current behaviour here.
 func TestRandomPortAcceptsNegativeRange(t *testing.T) {
+	t.Parallel()
+
 	port, err := randomPort(-10, -1)
 	if err != nil {
 		t.Errorf("randomPort(-10, -1) error: %v", err)
@@ -256,4 +262,28 @@ func TestRandomPortAcceptsNegativeRange(t *testing.T) {
 	if port < -10 || port > -1 {
 		t.Errorf("randomPort(-10, -1) = %d; out of range", port)
 	}
+}
+
+func FuzzRandomPort(f *testing.F) {
+	seeds := []struct{ min, max int }{
+		{30000, 31000},
+		{1, 65535},
+		{0, 0},
+		{100, 50},
+		{-10, -1},
+		{-100, 100},
+	}
+	for _, s := range seeds {
+		f.Add(s.min, s.max)
+	}
+
+	f.Fuzz(func(t *testing.T, min, max int) {
+		port, err := randomPort(min, max)
+		if err != nil {
+			return
+		}
+		if port < min || port > max {
+			t.Errorf("randomPort(%d, %d) = %d; out of range [%d, %d]", min, max, port, min, max)
+		}
+	})
 }

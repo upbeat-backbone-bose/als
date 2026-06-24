@@ -39,11 +39,11 @@ func TestSizeToBytes(t *testing.T) {
 		{name: "leading garbage", input: "foo1MB", wantErr: true},
 		{name: "double unit", input: "1MBGB", wantErr: true},
 
-// Overflow: int64 max is ~9.2e18. 9007199254740992 = 2^63; multiplied by
-// 2^40 it wraps to 0, which the new contract rejects. Inputs slightly
-// above 2^63 wrap to a small positive value (integer modular wrap);
-// out of scope for this fix -- the production allowlist
-// (config.SpeedtestFileList) is the primary defense.
+		// Overflow: int64 max is ~9.2e18. 9007199254740992 = 2^63; multiplied by
+		// 2^40 it wraps to 0, which the new contract rejects. Inputs slightly
+		// above 2^63 wrap to a small positive value (integer modular wrap);
+		// out of scope for this fix -- the production allowlist
+		// (config.SpeedtestFileList) is the primary defense.
 		{name: "TB wraps to zero rejected", input: "9007199254740992TB", wantErr: true},
 	}
 

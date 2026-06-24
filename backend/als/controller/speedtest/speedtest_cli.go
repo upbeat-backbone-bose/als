@@ -3,8 +3,6 @@ package speedtest
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"os/exec"
 	"sync/atomic"
 	"time"
@@ -35,9 +33,6 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 	client.WaitQueue(ctx, func() {
 		pos, totalPos := client.GetQueuePositionByCtx(ctx)
 		msg, _ := json.Marshal(gin.H{"type": "queue", "pos": pos, "totalPos": totalPos})
-		// Non-blocking send so this callback never pins the queue handler
-		// when the SSE consumer is slow or has disconnected. WaitQueue
-		// relies on cb returning promptly.
 		if closed.Load() {
 			return
 		}
@@ -59,25 +54,6 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 		}
 	}()
 
-	writer := func(pipe io.ReadCloser) {
-		for {
-			buf := make([]byte, 1024)
-			n, err := pipe.Read(buf)
-			if err != nil {
-				return
-			}
-			if closed.Load() {
-				return
-			}
-			// Non-blocking send so a slow consumer cannot block speedtest
-			// from finishing.
-			client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
-				Name:    "SpeedtestStream",
-				Content: string(buf[:n]),
-			})
-		}
-	}
-
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		c.JSON(500, &gin.H{"success": false, "error": "stdout pipe: " + err.Error()})
@@ -94,14 +70,13 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 		return
 	}
 
-	go writer(stdoutPipe)
-	go writer(stderrPipe)
+	go client.PipeToChannel(ctx, stdoutPipe, clientSession.Channel, "SpeedtestStream", func() bool { return !closed.Load() })
+	go client.PipeToChannel(ctx, stderrPipe, clientSession.Channel, "SpeedtestStream", func() bool { return !closed.Load() })
 
 	if err := cmd.Wait(); err != nil {
 		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
 		return
 	}
-	fmt.Println("speedtest-cli quit")
 	c.JSON(200, &gin.H{
 		"success": true,
 	})

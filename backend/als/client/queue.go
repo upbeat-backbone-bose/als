@@ -8,12 +8,12 @@ import (
 type queueEntry struct {
 	ctx    context.Context    // caller's parent context
 	cancel context.CancelFunc // cancels the internal queueCtx
-	notify func()            // optional position-update callback
+	notify func()             // optional position-update callback
 }
 
 var (
 	queueLock    sync.Mutex
-	queueEntries []*queueEntry        // ordered slice for FIFO
+	queueEntries []*queueEntry         // ordered slice for FIFO
 	queueWakeup  = make(chan struct{}) // signal to HandleQueue
 )
 

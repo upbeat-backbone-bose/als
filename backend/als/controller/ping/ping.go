@@ -12,7 +12,6 @@ func Handle(c *gin.Context) {
 	ip, ok := c.GetQuery("ip")
 	v, _ := c.Get("clientSession")
 	clientSession := v.(*client.ClientSession)
-	channel := clientSession.Channel
 	if !ok {
 		c.JSON(400, &gin.H{
 			"success": false,
@@ -31,18 +30,17 @@ func Handle(c *gin.Context) {
 	}
 
 	p.Count = 10
+	ctx := clientSession.GetContext(c.Request.Context())
 	p.OnEvent = func(event *ping.PacketEvent, _ error) {
 		content, err := json.Marshal(event)
 		if err != nil {
 			return
 		}
-		msg := &client.Message{
+		client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
 			Name:    "Ping",
 			Content: string(content),
-		}
-		channel <- msg
+		})
 	}
-	ctx := clientSession.GetContext(c.Request.Context())
 	p.Start(ctx)
 
 	c.JSON(200, &gin.H{

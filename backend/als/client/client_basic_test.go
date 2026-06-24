@@ -280,6 +280,4 @@ func TestClientsMuExposesInternalMutex(t *testing.T) {
 	if mu == nil {
 		t.Fatal("ClientsMu returned nil")
 	}
-	mu.Lock()
-	mu.Unlock()
 }
