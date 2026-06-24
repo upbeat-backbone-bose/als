@@ -41,7 +41,15 @@ func Handle(c *gin.Context) {
 			Content: string(content),
 		})
 	}
-	p.Start(ctx)
+
+	// Start blocks until Count packets are sent or ctx is cancelled, so
+	// it must run in a goroutine. The returned ctx is owned by the
+	// caller -- defer its cancel to release the watcher goroutine
+	// inside GetContext promptly when the client disconnects.
+	go func() {
+		defer func() { _ = recover() }()
+		p.Start(ctx)
+	}()
 
 	c.JSON(200, &gin.H{
 		"success": true,

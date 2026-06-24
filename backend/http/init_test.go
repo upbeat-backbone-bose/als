@@ -113,3 +113,41 @@ func TestStartAndShutdown(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestStartRejectsDoubleStart pins the contract that calling Start a
+// second time returns an error instead of overwriting the first
+// http.Server reference (which would orphan the first listener).
+func TestStartRejectsDoubleStart(t *testing.T) {
+	s := CreateServer()
+	s.SetListen("127.0.0.1:0")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := s.Start(); err != nil && err != http.ErrServerClosed {
+			t.Errorf("first Start(): %v", err)
+		}
+	}()
+
+	for {
+		s.mu.Lock()
+		ready := s.httpServer != nil
+		s.mu.Unlock()
+		if ready {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if err := s.Start(); err == nil {
+		t.Fatal("second Start() returned nil; want error")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	wg.Wait()
+}

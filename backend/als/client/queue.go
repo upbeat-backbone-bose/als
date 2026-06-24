@@ -61,10 +61,10 @@ func WaitQueue(ctx context.Context, cb func()) {
 	}
 }
 
-// shutdownQueue cancels every entry's queueCtx so parked WaitQueue calls
+// ShutdownQueue cancels every entry's queueCtx so parked WaitQueue calls
 // unblock immediately. Used during graceful shutdown to release callers
 // even if their parent ctx is still alive.
-func shutdownQueue() {
+func ShutdownQueue() {
 	queueLock.Lock()
 	defer queueLock.Unlock()
 	for _, e := range queueEntries {
@@ -94,7 +94,7 @@ func HandleQueue(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			shutdownQueue()
+			ShutdownQueue()
 			return
 		case <-queueWakeup:
 		}
@@ -112,7 +112,7 @@ func HandleQueue(ctx context.Context) {
 			// Bail out promptly if cancellation arrives between entries.
 			select {
 			case <-ctx.Done():
-				shutdownQueue()
+				ShutdownQueue()
 				return
 			default:
 			}
@@ -145,7 +145,7 @@ func HandleQueue(ctx context.Context) {
 			select {
 			case <-head.ctx.Done():
 			case <-ctx.Done():
-				shutdownQueue()
+				ShutdownQueue()
 				return
 			}
 

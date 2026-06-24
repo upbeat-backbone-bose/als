@@ -347,3 +347,52 @@ func TestGetQueuePosition(t *testing.T) {
 		})
 	}
 }
+
+// TestShutdownQueueReleasesAllWaiters verifies that the exported
+// ShutdownQueue releases every parked WaitQueue caller immediately,
+// regardless of their parent ctx. This is the graceful-shutdown
+// safety net used by als.Init when SIGINT/SIGTERM arrives.
+func TestShutdownQueueReleasesAllWaiters(t *testing.T) {
+	resetQueueForTest(t)
+
+	const parked = 3
+	var wg sync.WaitGroup
+	for i := 0; i < parked; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Parent ctx stays alive: only ShutdownQueue must unblock
+			// these.
+			WaitQueue(context.Background(), nil)
+		}()
+	}
+
+	// Wait for all entries to be parked.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		queueLock.Lock()
+		n := len(queueEntries)
+		queueLock.Unlock()
+		if n >= parked {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("only %d/%d callers parked within 2s", n, parked)
+		}
+		runtime.Gosched()
+		time.Sleep(time.Millisecond)
+	}
+
+	ShutdownQueue()
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitQueue callers did not unblock after ShutdownQueue")
+	}
+}

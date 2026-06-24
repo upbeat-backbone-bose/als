@@ -127,3 +127,38 @@ func TestUpdateInterfaceCacheEmptyCache(t *testing.T) {
 		t.Fatal("InterfaceCache message not delivered for empty cache")
 	}
 }
+
+// TestUpdateInterfaceCacheReturns503WhenClientSlow verifies the new
+// contract: if the client channel is full (consumer not keeping up),
+// the handler surfaces 503 instead of silently dropping the message.
+func TestUpdateInterfaceCacheReturns503WhenClientSlow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	withTimerCache(t, map[int]*timer.InterfaceTrafficCache{
+		1: {InterfaceName: "eth0"},
+	})
+
+	// Session whose channel is already full -> TrySend returns false.
+	full := make(chan *client.Message, 1)
+	full <- &client.Message{Name: "filler"}
+	client.AddClient("slow-session", &client.ClientSession{
+		Channel:   full,
+		CreatedAt: time.Now(),
+	})
+	t.Cleanup(func() { client.RemoveClient("slow-session") })
+
+	r := gin.New()
+	r.GET("/cache/interfaces", func(c *gin.Context) {
+		s, _ := client.GetClient("slow-session")
+		c.Set("clientSession", s)
+		UpdateInterfaceCache(c)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/cache/interfaces", http.NoBody)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d; want 503; body = %s", w.Code, w.Body.String())
+	}
+}

@@ -32,7 +32,10 @@ func HandleSpeedtestDotNet(c *gin.Context) {
 	}()
 	client.WaitQueue(ctx, func() {
 		pos, totalPos := client.GetQueuePositionByCtx(ctx)
-		msg, _ := json.Marshal(gin.H{"type": "queue", "pos": pos, "totalPos": totalPos})
+		msg, err := json.Marshal(gin.H{"type": "queue", "pos": pos, "totalPos": totalPos})
+		if err != nil {
+			return
+		}
 		if closed.Load() {
 			return
 		}

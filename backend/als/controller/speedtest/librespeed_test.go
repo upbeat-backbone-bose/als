@@ -67,7 +67,7 @@ func TestHandleDownload(t *testing.T) {
 				path += "?ckSize=" + tt.ckSize
 			}
 
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
 

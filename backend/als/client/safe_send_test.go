@@ -9,6 +9,8 @@ import (
 )
 
 func TestSafeChannelSend(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		capacity    int
@@ -133,12 +135,16 @@ func TestPipeToChannelReadsAll(t *testing.T) {
 	PipeToChannel(ctx, pipe, ch, "test", nil)
 
 	var got strings.Builder
+	deadline := time.After(time.Second)
 loop:
-	for i := 0; i < 100; i++ {
+	for {
 		select {
 		case msg := <-ch:
 			got.WriteString(msg.Content)
-		case <-time.After(50 * time.Millisecond):
+			if got.String() == data {
+				break loop
+			}
+		case <-deadline:
 			break loop
 		}
 	}

@@ -45,6 +45,11 @@ func Init() {
 		<-quit
 		log.Default().Println("Shutting down server...")
 		cancel()
+		// Release callers parked in WaitQueue immediately, even if their
+		// parent context (e.g. a 60s speedtest timeout) is still alive.
+		// HandleQueue will also call this on its own ctx.Done, but the
+		// goroutine may be blocked inside a notify callback.
+		client.ShutdownQueue()
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer shutdownCancel()
 		if err := aHttp.Shutdown(shutdownCtx); err != nil {

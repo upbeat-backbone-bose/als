@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"net/http/pprof"
@@ -53,6 +54,10 @@ func (e *Server) SetListen(listen string) {
 
 func (e *Server) Start() error {
 	e.mu.Lock()
+	if e.httpServer != nil {
+		e.mu.Unlock()
+		return errors.New("server already started")
+	}
 	e.httpServer = &http.Server{
 		Addr:    e.listen,
 		Handler: e.engine,

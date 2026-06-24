@@ -3,13 +3,10 @@ version: "2"
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
-    - gofmt
-    - goimports
     - misspell
     - unconvert
     - unparam
@@ -17,7 +14,7 @@ linters:
     - noctx
     - gocritic
     - prealloc
-    - exportloopref
+    - copyloopvar
     - nilerr
     - durationcheck
     - errorlint
@@ -61,9 +58,18 @@ linters:
           - gosec
           - bodyclose
           - noctx
+      # fakeshell drives an interactive shell whose subprocess return
+      # values are intentionally ignored: the call site owns its own
+      # error contract. Restrict the exclusion to errcheck only so other
+      # linters still inspect the package.
       - path: fakeshell/
         linters:
           - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
 
 run:
   timeout: 5m

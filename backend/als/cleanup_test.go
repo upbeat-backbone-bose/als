@@ -132,17 +132,13 @@ func TestCleanupExpiredClientsExitsOnContext(t *testing.T) {
 	}
 }
 
-func TestCleanupExpiredClientsProductionDefaults(t *testing.T) {
-	// Without injection, the production defaults apply (1h interval,
-	// real time.Ticker). We cannot wait an hour, so just verify the
-	// function path is reachable: call it in a goroutine and cancel
-	// via the package-level cleanupContext that the test framework
-	// would not normally populate -- instead we just confirm that the
-	// goroutine starts.
+func TestCleanupExpiredClientsHonorsInjectedContext(t *testing.T) {
+	// Override only ctx; interval/ticker fall back to defaults. The
+	// function must exit when the injected ctx is cancelled even though
+	// the production ticker would never fire.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Override only ctx; interval/ticker fall back to defaults.
 	prevCtx := cleanupContext
 	cleanupContext = ctx
 	defer func() { cleanupContext = prevCtx }()

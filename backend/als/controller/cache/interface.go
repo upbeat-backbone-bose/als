@@ -21,10 +21,15 @@ func UpdateInterfaceCache(c *gin.Context) {
 		c.JSON(500, &gin.H{"success": false, "error": err.Error()})
 		return
 	}
-	clientSession.TrySend(&client.Message{
+	if !clientSession.TrySend(&client.Message{
 		Name:    "InterfaceCache",
 		Content: string(interfaceCacheJson),
-	})
+	}) {
+		// Client is not keeping up or already gone; surface the failure
+		// rather than silently dropping the message.
+		c.JSON(503, &gin.H{"success": false, "error": "client not ready"})
+		return
+	}
 
 	c.JSON(200, &gin.H{
 		"success": true,

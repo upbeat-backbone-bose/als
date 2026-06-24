@@ -101,6 +101,9 @@ func updateInterfaceTraffic() {
 		if ts < 0 {
 			ts = 0
 		}
+		// Build the entry inside the lock; release before broadcasting
+		// so the per-client channel send is not held under the cache
+		// mutex and does not serialise across all clients.
 		interfaceCachesMu.Lock()
 		cache, ok := InterfaceCaches[iface.Index]
 		if !ok {

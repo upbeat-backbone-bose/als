@@ -76,8 +76,8 @@ func TestHandleClientDisconnected(t *testing.T) {
 	})
 	r.GET("/probe", Handle)
 
-	cancelledReqCtx, c := context.WithCancel(context.Background())
-	c()
+	cancelledReqCtx, cancelReq := context.WithCancel(context.Background())
+	cancelReq()
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil).WithContext(cancelledReqCtx)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -214,6 +214,7 @@ func TestRandomPortInRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Run several iterations since randomPort uses crypto/rand.
 			for i := 0; i < 100; i++ {
 				port, err := randomPort(tt.min, tt.max)
@@ -241,6 +242,7 @@ func TestRandomPortInvalidRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			port, err := randomPort(tt.min, tt.max)
 			if err == nil {
 				t.Errorf("randomPort(%d, %d) = %d; want error", tt.min, tt.max, port)
@@ -265,7 +267,7 @@ func TestRandomPortAcceptsNegativeRange(t *testing.T) {
 }
 
 func FuzzRandomPort(f *testing.F) {
-	seeds := []struct{ min, max int }{
+	seeds := []struct{ lo, hi int }{
 		{30000, 31000},
 		{1, 65535},
 		{0, 0},
@@ -274,16 +276,16 @@ func FuzzRandomPort(f *testing.F) {
 		{-100, 100},
 	}
 	for _, s := range seeds {
-		f.Add(s.min, s.max)
+		f.Add(s.lo, s.hi)
 	}
 
-	f.Fuzz(func(t *testing.T, min, max int) {
-		port, err := randomPort(min, max)
+	f.Fuzz(func(t *testing.T, lo, hi int) {
+		port, err := randomPort(lo, hi)
 		if err != nil {
 			return
 		}
-		if port < min || port > max {
-			t.Errorf("randomPort(%d, %d) = %d; out of range [%d, %d]", min, max, port, min, max)
+		if port < lo || port > hi {
+			t.Errorf("randomPort(%d, %d) = %d; out of range [%d, %d]", lo, hi, port, lo, hi)
 		}
 	})
 }

@@ -6,7 +6,7 @@ import (
 )
 
 // SafeChannelSend writes msg to ch without blocking. Returns true on
-// success, false if the channel was full or ctx is already cancelled.
+// success, false if the channel was full.
 //
 // It exists so producers (callbacks, writer goroutines) can deliver
 // messages to a ClientSession without ever pinning the queue handler
@@ -14,7 +14,10 @@ import (
 // A full channel is treated as "consumer not keeping up": the message
 // is dropped rather than blocking the producer.
 //
-// ctx may be nil; a nil ctx is treated as context.Background().
+// ctx is accepted for API symmetry with other helpers in the package
+// and is normalised when nil. It is intentionally not consulted on
+// the select because the `default` branch is always ready and the
+// select must not block.
 //
 // SafeChannelSend is the canonical entry point -- controllers must
 // not perform raw blocking sends into ClientSession.Channel.
@@ -22,14 +25,10 @@ func SafeChannelSend(ctx context.Context, ch chan<- *Message, msg *Message) bool
 	if ch == nil {
 		return false
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	_ = ctx // accepted for API symmetry; not used in non-blocking send
 	select {
 	case ch <- msg:
 		return true
-	case <-ctx.Done():
-		return false
 	default:
 		return false
 	}

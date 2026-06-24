@@ -116,24 +116,64 @@ func TestHandleRegistersAndRemovesClient(t *testing.T) {
 	router := gin.New()
 	router.GET("/session", Handle)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	defer parentCancel()
 
-	req := httptest.NewRequest(http.MethodGet, "/session", nil).WithContext(ctx)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	bodyBuf := &threadSafeBuffer{}
+	w := &safeResponseRecorder{ResponseRecorder: httptest.NewRecorder(), buf: bodyBuf}
 
-	body := w.Body.String()
-	if !strings.Contains(body, "event:SessionId") {
-		t.Fatalf("SessionId event not found:\n%s", body)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		router.ServeHTTP(w, reqWithCtx(parentCtx))
+	}()
+
+	// Phase 1: the session must be registered in the global map.
+	deadline := time.Now().Add(time.Second)
+	var session *client.ClientSession
+	for {
+		client.ClientsMu().RLock()
+		for _, s := range client.Clients {
+			if s != nil {
+				session = s
+				break
+			}
+		}
+		client.ClientsMu().RUnlock()
+		if session != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Handle did not register a session within 1s")
+		}
+		time.Sleep(time.Millisecond)
 	}
 
-	// After Handle returns, the session should be removed from the global
-	// map (defer fires regardless of how the loop exits).
-	if count := client.RemoveExpiredClients(); count != 0 {
-		// Some leftover may exist from another test; just check no zombie
-		// session is older than the request we just served.
-		t.Logf("note: %d sessions older than 24h were cleaned up", count)
+	// Phase 2: cancel the request, wait for the handler to return, and
+	// verify the session is no longer in the global map (defer fires).
+	parentCancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Handle did not exit after ctx cancel")
+	}
+
+	deadline = time.Now().Add(time.Second)
+	for {
+		client.ClientsMu().RLock()
+		n := len(client.Clients)
+		client.ClientsMu().RUnlock()
+		if n == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("session not removed from global map; remaining=%d", n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	if !strings.Contains(bodyBuf.String(), "event:SessionId") {
+		t.Errorf("SessionId event missing from body: %s", bodyBuf.String())
 	}
 }
 
@@ -300,6 +340,12 @@ func (b *threadSafeBuffer) String() string {
 
 // safeResponseRecorder captures SSE writes through a thread-safe buffer
 // while delegating other methods to the standard httptest recorder.
+//
+// Only Write and WriteString are wrapped. Other methods (Header, Code,
+// Flush) still go to the embedded *httptest.ResponseRecorder, which is
+// NOT safe for concurrent access. Tests using this wrapper must only
+// assert on body content; do not assert on Header or Code after the
+// handler goroutine has started writing.
 type safeResponseRecorder struct {
 	*httptest.ResponseRecorder
 	buf *threadSafeBuffer
@@ -326,9 +372,6 @@ func parseSSEEvent(t *testing.T, body, name string) string {
 		dataLines    []string
 	)
 	flush := func() {
-		if currentEvent == name {
-			t.Logf("found %s event with %d data lines", name, len(dataLines))
-		}
 		currentEvent = ""
 		dataLines = nil
 	}

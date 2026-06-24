@@ -57,11 +57,15 @@ func BenchmarkBroadCastMessage(b *testing.B) {
 	Clients["c1"] = c1
 	Clients["c2"] = c2
 
+	c1Done := make(chan struct{})
+	c2Done := make(chan struct{})
 	go func() {
+		defer close(c1Done)
 		for range c1.Channel {
 		}
 	}()
 	go func() {
+		defer close(c2Done)
 		for range c2.Channel {
 		}
 	}()
@@ -70,24 +74,37 @@ func BenchmarkBroadCastMessage(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		BroadCastMessage("evt", "data")
 	}
+	b.StopTimer()
+
+	close(c1.Channel)
+	close(c2.Channel)
+	<-c1Done
+	<-c2Done
 }
 
 func BenchmarkPipeToChannel(b *testing.B) {
-	ch := make(chan *Message, 1024)
+	ch := make(chan *Message, 16)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	data := strings.Repeat("x", 65536)
-	// 64K data; with 8K buffer → 8 messages per iter
-	const msgsPerIter = 8
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		r := io.NopCloser(strings.NewReader(data))
-		go func() { PipeToChannel(ctx, r, ch, "test", nil) }()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			PipeToChannel(ctx, r, ch, "test", nil)
+		}()
 
-		for j := 0; j < msgsPerIter; j++ {
-			<-ch
+	drain:
+		for {
+			select {
+			case <-ch:
+			case <-done:
+				break drain
+			}
 		}
 	}
 }
