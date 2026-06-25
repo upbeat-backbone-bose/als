@@ -1,6 +1,7 @@
 package embed
 
 import (
+	"errors"
 	"io/fs"
 	"testing"
 )
@@ -15,7 +16,8 @@ func TestUIStaticFilesDeclared(t *testing.T) {
 		// A non-PathError is a real failure; PathError is acceptable
 		// only if the embed directive was not run (unlikely since the
 		// build succeeded).
-		if _, ok := err.(*fs.PathError); !ok {
+		var pathErr *fs.PathError
+		if !errors.As(err, &pathErr) {
 			t.Fatalf("ReadDir(ui) unexpected error: %v", err)
 		}
 		t.Fatalf("ReadDir(ui) PathError: %v", err)

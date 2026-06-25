@@ -143,24 +143,7 @@ func TestSetupInterfaceBroadcastPreCanceled(t *testing.T) {
 	}
 }
 
-// Note: InterfaceTrafficCache struct-level tests (defaults, field
-// round-trip) were removed -- they tested the Go zero-value
-// contract, not the timer package, and would pass for any struct
+// Note: InterfaceTrafficCache struct-level tests were removed --
+// they tested the Go zero-value contract or simple field
+// assignment, not the timer package, and would pass for any struct
 // definition.
-
-func TestInterfaceTrafficCacheFields(t *testing.T) {
-	now := time.Now()
-	cache := &InterfaceTrafficCache{
-		InterfaceName: "eth0",
-		LastCacheTime: now,
-		Caches:        [][3]uint64{{1, 2, 3}},
-		LastRx:        100,
-		LastTx:        200,
-	}
-	if cache.InterfaceName != "eth0" {
-		t.Errorf("InterfaceName = %q; want eth0", cache.InterfaceName)
-	}
-	if cache.LastRx != 100 || cache.LastTx != 200 {
-		t.Errorf("counters = (%d,%d); want (100,200)", cache.LastRx, cache.LastTx)
-	}
-}
