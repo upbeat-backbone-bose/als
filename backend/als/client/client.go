@@ -44,7 +44,6 @@ func (c *ClientSession) GetContext(requestCtx context.Context) context.Context {
 	go func() {
 		// Local references: c.ctx may be reassigned by SetContext
 		// concurrently, so we capture the current parent here.
-		// (See the package doc on c.ctx for the threading model.)
 		parent := c.ctx
 		var parentDone <-chan struct{}
 		if parent != nil {
@@ -75,9 +74,6 @@ func (c *ClientSession) TrySend(msg *Message) bool {
 // or has an unexpected type. Callers should treat the false case as a
 // programming error (middleware not installed) and return 500.
 func SessionFromContext(v any) (*ClientSession, bool) {
-	if v == nil {
-		return nil, false
-	}
 	s, ok := v.(*ClientSession)
 	return s, ok
 }

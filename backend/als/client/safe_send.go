@@ -14,13 +14,9 @@ import (
 // A full channel is treated as "consumer not keeping up": the message
 // is dropped rather than blocking the producer.
 //
-// ctx is accepted for API symmetry with other helpers in the package
-// and is normalised when nil. It is intentionally not consulted on
-// the select because the `default` branch is always ready and the
-// select must not block.
-//
-// SafeChannelSend is the canonical entry point -- controllers must
-// not perform raw blocking sends into ClientSession.Channel.
+// ctx is accepted for API symmetry with other helpers in the package.
+// It is intentionally not consulted on the select because the
+// `default` branch is always ready and the select must not block.
 func SafeChannelSend(ctx context.Context, ch chan<- *Message, msg *Message) bool {
 	if ch == nil {
 		return false

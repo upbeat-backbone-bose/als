@@ -46,16 +46,19 @@ func Handle(c *gin.Context) {
 
 	// Send the assigned port to the client. Use non-blocking send so a
 	// disconnected/slow SSE consumer cannot prevent the iperf3 server
-	// from starting.
-	if !client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
+	// from starting. If the client is already gone (ctx done), fail
+	// fast rather than spawning iperf3 for a consumer that cannot
+	// read its output.
+	client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
 		Name:    "Iperf3",
 		Content: strconv.Itoa(port),
-	}) && ctx.Err() != nil {
+	})
+	if ctx.Err() != nil {
 		c.JSON(500, gin.H{"success": false, "error": "client disconnected"})
 		return
 	}
 
-	cmd := exec.CommandContext(ctx, "iperf3", "-s", "--forceflush", "-p", fmt.Sprintf("%d", port)) // #nosec G204 args are internally generated
+	cmd := exec.CommandContext(ctx, "iperf3", "-s", "--forceflush", "-p", strconv.Itoa(port)) // #nosec G204 args are internally generated
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {

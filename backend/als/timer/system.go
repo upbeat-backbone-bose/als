@@ -9,24 +9,17 @@ import (
 	"github.com/samlm0/als/v2/als/client"
 )
 
-// updateInterval is the default interval at which UpdateSystemResource
-// broadcasts memory usage. Override updateIntervalForTest to shorten
-// it during testing.
+// updateInterval is the default interval at which the memory-usage
+// goroutine broadcasts. Tests override tickerFactoryForTest to
+// inject a controllable channel; production code uses the default.
 var updateInterval = 5 * time.Second
 
 // tickerFactoryForTest returns the channel the goroutine reads ticks
 // from. When nil the production default is used.
 var tickerFactoryForTest func() <-chan time.Time
 
-// UpdateSystemResource periodically broadcasts the current memory
-// usage to every client. It exits when ctx is cancelled.
-func UpdateSystemResource() {
-	ctx := context.Background()
-	UpdateSystemResourceContext(ctx)
-}
-
-// UpdateSystemResourceContext is the cancellable variant used by
-// tests and by callers that need to shut the goroutine down.
+// UpdateSystemResourceContext periodically broadcasts the current
+// memory usage to every client. It exits when ctx is cancelled.
 func UpdateSystemResourceContext(ctx context.Context) {
 	var m runtime.MemStats
 

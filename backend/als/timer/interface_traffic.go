@@ -44,10 +44,6 @@ func GetInterfaceCachesSnapshot() map[int]*InterfaceTrafficCache {
 	return result
 }
 
-func SetupInterfaceBroadcast() {
-	SetupInterfaceBroadcastContext(context.Background())
-}
-
 func SetupInterfaceBroadcastContext(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
