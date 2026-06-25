@@ -9,34 +9,8 @@ import (
 	"time"
 
 	"github.com/samlm0/als/v2/als/client"
+	"github.com/samlm0/als/v2/internal/testutil"
 )
-
-// waitFor spins until cond returns true or timeout elapses. Replaces
-// the legacy time.Sleep-based polling. See als/client/wait_helpers_test.go
-// for the canonical version.
-//
-// linter's per-file analysis can't see across files.
-//
-//nolint:unparam // each call site picks a different timeout; the
-func waitFor(t *testing.T, timeout time.Duration, msg string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	tick := time.NewTicker(time.Millisecond)
-	defer tick.Stop()
-	for {
-		if cond() {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("waitFor timed out after %v: %s", timeout, msg)
-		}
-		select {
-		case <-tick.C:
-		default:
-			runtime.Gosched()
-		}
-	}
-}
 
 // withInjection sets cleanupContext/cleanupInterval/newTickerForTest
 // for the duration of t, restoring nil after.
@@ -116,7 +90,7 @@ func TestCleanupExpiredClientsLogsAndStops(t *testing.T) {
 
 	// The cleanup goroutine may not have observed the tick yet; wait
 	// until the expired session is gone.
-	waitFor(t, 2*time.Second, "expired session removed", func() bool {
+	testutil.WaitFor(t, 2*time.Second, "expired session removed", func() bool {
 		client.ClientsMu().RLock()
 		_, expired := client.Clients["expired"]
 		client.ClientsMu().RUnlock()
@@ -128,25 +102,6 @@ func TestCleanupExpiredClientsLogsAndStops(t *testing.T) {
 	// After cancel the goroutine must exit; we verify by checking that
 	// a follow-up ticker send does not panic / hang.
 	ticker <- time.Now()
-}
-
-func TestCleanupExpiredClientsNoLogWhenZeroRemoved(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ticker := make(chan time.Time, 4)
-	withInjection(t, ctx, time.Hour, ticker)
-
-	// No goroutine is started here: withInjection only sets the
-	// package-level injection points, not cleanupExpiredClients()
-	// itself. This test therefore exercises "setting up the
-	// injection points with a buffered ticker and a fresh context
-	// does not panic or log spuriously when no cleanup goroutine
-	// ever runs". Drive a tick so the ticker has data buffered
-	// (it is never read), then cancel and exit.
-	ticker <- time.Now()
-	cancel()
-	_ = ctx
 }
 
 func TestCleanupExpiredClientsExitsOnContext(t *testing.T) {

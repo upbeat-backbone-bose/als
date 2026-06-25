@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +29,6 @@ func withClientSession(t *testing.T, id string) {
 		CreatedAt: time.Now(),
 	})
 	t.Cleanup(func() { client.RemoveClient(id) })
-	_ = context.TODO()
 }
 
 func TestUpdateInterfaceCacheSendsToChannel(t *testing.T) {

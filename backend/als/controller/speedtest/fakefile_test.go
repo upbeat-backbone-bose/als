@@ -132,3 +132,40 @@ func FuzzSizeToBytes(f *testing.F) {
 		}
 	})
 }
+
+func TestSizeToBytesAdditionalBoundaries(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   string
+		want    int64
+		wantErr bool
+	}{
+		{name: "1024KB = 1MB", input: "1024KB", want: 1024 * 1024},
+		{name: "1024MB = 1GB", input: "1024MB", want: 1024 * 1024 * 1024},
+		{name: "1024GB = 1TB", input: "1024GB", want: 1024 * 1024 * 1024 * 1024},
+		{name: "large KB", input: "999999KB", want: 999999 * 1024},
+		{name: "large MB", input: "999999MB", want: 999999 * 1024 * 1024},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := sizeToBytes(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("sizeToBytes(%q) = %d; want error", tt.input, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("sizeToBytes(%q) unexpected error: %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Errorf("sizeToBytes(%q) = %d; want %d", tt.input, got, tt.want)
+			}
+		})
+	}
+}

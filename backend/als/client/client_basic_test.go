@@ -165,19 +165,30 @@ func TestGetContextConcurrentCallsCancelIndependently(t *testing.T) {
 
 func TestRemoveClientMissing(t *testing.T) {
 	resetClientMap()
-	// Removing a non-existent id must not panic.
+	// Removing a non-existent id must not panic and must not
+	// create the entry.
 	RemoveClient("never-existed")
+	if _, ok := Clients["never-existed"]; ok {
+		t.Error("Clients[never-existed] was created by RemoveClient")
+	}
 }
 
 func TestRemoveClientNoCancelFunc(t *testing.T) {
 	resetClientMap()
-	// cancelFunc nil -- the remove path must not panic.
+	// cancelFunc nil -- the remove path must not panic and must
+	// actually remove the entry.
 	session := &ClientSession{
 		Channel:   make(chan *Message, 1),
 		CreatedAt: time.Now(),
 	}
 	AddClient("no-cancel", session)
+	if _, ok := Clients["no-cancel"]; !ok {
+		t.Fatal("setup: AddClient did not register the session")
+	}
 	RemoveClient("no-cancel")
+	if _, ok := Clients["no-cancel"]; ok {
+		t.Error("Clients[no-cancel] was not removed by RemoveClient")
+	}
 }
 
 func TestSetContextAndGetContext(t *testing.T) {
@@ -280,6 +291,26 @@ func TestClientsMuExposesInternalMutex(t *testing.T) {
 	if mu == nil {
 		t.Fatal("ClientsMu returned nil")
 	}
+
+	// Exercise the mutex: take a write lock and confirm the
+	// map is reachable. This pins the contract that the returned
+	// pointer is functional and shared with the package-internal
+	// mutex, not a copy.
+	mu.Lock()
+	prev := Clients
+	Clients = make(map[string]*ClientSession)
+	Clients["probe"] = &ClientSession{Channel: make(chan *Message, 1), CreatedAt: time.Now()}
+	mu.Unlock()
+
+	mu.RLock()
+	if _, ok := Clients["probe"]; !ok {
+		t.Error("ClientsMu did not return the same Clients map")
+	}
+	mu.RUnlock()
+
+	mu.Lock()
+	Clients = prev
+	mu.Unlock()
 }
 
 func TestSessionFromContext(t *testing.T) {

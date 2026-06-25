@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -130,16 +129,6 @@ func TestMiddlewareSessionOnHeaderErrorBody(t *testing.T) {
 
 func clearTestClients(t *testing.T) {
 	t.Helper()
-	client.RemoveClient("__never__") // safe; never inserted
-	for id := range client.Clients {
-		client.RemoveClient(id)
-	}
-	// Some tests insert directly via AddClient; the cleanup below is
-	// best-effort. The global map is also nuked on cleanup.
-	t.Cleanup(func() {
-		for id := range client.Clients {
-			client.RemoveClient(id)
-		}
-	})
-	_ = context.TODO()
+	client.RemoveAllClients()
+	t.Cleanup(client.RemoveAllClients)
 }

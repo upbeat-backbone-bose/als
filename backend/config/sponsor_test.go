@@ -9,21 +9,113 @@ import (
 	"testing"
 )
 
-func TestLoadWebConfigSkippedDueToGoroutine(t *testing.T) {
-	// LoadWebConfig spawns a goroutine that calls updatePublicIP and
-	// updateLocation when both PublicIPv4 and PublicIPv6 are empty.
-	// Both functions depend on real DNS/HTTP and would race with
-	// test cleanup. Until LoadWebConfig is refactored to expose an
-	// injection point for the IP-lookup client, the only testable
-	// surface -- the iperf3 binary presence check -- cannot be
-	// exercised in isolation.
-	t.Skip("LoadWebConfig spawns an IP-lookup goroutine that races with cleanup; needs refactor")
+// TestLoadWebConfigIPLookupSkippedWhenBothSet verifies that when
+// both PublicIPv4 and PublicIPv6 are pre-set via env, LoadWebConfig
+// does not spawn the IP-lookup goroutine (which would race with
+// test cleanup because it makes real DNS/HTTP calls). We set
+// PUBLIC_IPV4 + PUBLIC_IPV6 + LOCATION env vars, then install a
+// transport that fails any outbound request as a safety net: if a
+// future regression starts the goroutine again, the test fails
+// fast via the t.Errorf in the handler.
+//
+// The iperf3 binary path is not testable without shadowing
+// exec.LookPath -- the iperf3 feature flag flips to false only
+// when exec.LookPath returns an error, which we cannot easily
+// intercept.
+func TestLoadWebConfigIPLookupSkippedWhenBothSet(t *testing.T) {
+	prev := Config
+	Config = &ALSConfig{}
+	t.Cleanup(func() { Config = prev })
+	prevInternal := IsInternalCall
+	IsInternalCall = true
+	t.Cleanup(func() { IsInternalCall = prevInternal })
+
+	withEnv(t, map[string]string{
+		"PUBLIC_IPV4": "1.2.3.4",
+		"PUBLIC_IPV6": "::1",
+		"LOCATION":    "Earth",
+	})
+
+	// Safety net: any outbound request fails loudly. If a future
+	// regression starts the IP-lookup goroutine, the test fails
+	// fast instead of silently leaking DNS/HTTP traffic.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected outbound HTTP request to %s", r.URL.String())
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	installTestTransport(t, server.URL)
+
+	LoadWebConfig()
+
+	if Config.PublicIPv4 != "1.2.3.4" {
+		t.Errorf("PublicIPv4 = %q; want unchanged", Config.PublicIPv4)
+	}
+	if Config.PublicIPv6 != "::1" {
+		t.Errorf("PublicIPv6 = %q; want unchanged", Config.PublicIPv6)
+	}
+	if Config.Location != "Earth" {
+		t.Errorf("Location = %q; want unchanged", Config.Location)
+	}
+
+	// iperf3 is not on PATH (empty safety-net dir): the
+	// LoadWebConfig must detect this and set FeatureIperf3=false.
+	if Config.FeatureIperf3 {
+		t.Error("FeatureIperf3 = true; want false (iperf3 is not on PATH)")
+	}
+}
+
+// TestLoadWebConfigIperf3OnPathPreemptsOverride covers the path
+// where iperf3 IS on PATH. We drop a fake iperf3 binary into a
+// temp dir and prepend it to PATH, then assert FeatureIperf3
+// remains true after LoadWebConfig.
+//
+// This pins the inverse of the "not on PATH" path: a regression
+// that unconditionally clears FeatureIperf3 would be caught.
+func TestLoadWebConfigIperf3OnPathPreemptsOverride(t *testing.T) {
+	prev := Config
+	Config = &ALSConfig{}
+	t.Cleanup(func() { Config = prev })
+	prevInternal := IsInternalCall
+	IsInternalCall = true
+	t.Cleanup(func() { IsInternalCall = prevInternal })
+
+	withEnv(t, map[string]string{
+		"PUBLIC_IPV4": "1.2.3.4",
+		"PUBLIC_IPV6": "::1",
+	})
+
+	// Drop a fake iperf3 onto PATH.
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "iperf3")
+	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake iperf3: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// Same safety net for the IP-lookup goroutine.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected outbound HTTP request to %s", r.URL.String())
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	installTestTransport(t, server.URL)
+
+	// Pre-set FeatureIperf3=true so we can verify the path
+	// where iperf3 IS available does not clear it.
+	Config.FeatureIperf3 = true
+
+	LoadWebConfig()
+
+	if !Config.FeatureIperf3 {
+		t.Error("FeatureIperf3 = false; want true (iperf3 is on PATH)")
+	}
 }
 
 func TestLoadSponsorMessageEmpty(t *testing.T) {
 	// Empty SponsorMessage: function must return immediately without
 	// touching anything.
-	Config = &ALSConfig{SponsorMessage: ""}
+	withConfig(t, &ALSConfig{SponsorMessage: ""})
 	LoadSponsorMessage()
 	if Config.SponsorMessage != "" {
 		t.Errorf("SponsorMessage = %q; want empty", Config.SponsorMessage)
@@ -39,7 +131,7 @@ func TestLoadSponsorMessageFromLocalFile(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	Config = &ALSConfig{SponsorMessage: path}
+	withConfig(t, &ALSConfig{SponsorMessage: path})
 	LoadSponsorMessage()
 
 	if Config.SponsorMessage != content {
@@ -51,7 +143,7 @@ func TestLoadSponsorMessageFromLocalFileMissing(t *testing.T) {
 	// Path that does not exist: os.Stat errors, http.Get errors,
 	// SponsorMessage must remain unchanged.
 
-	Config = &ALSConfig{SponsorMessage: "/nonexistent/path/" + fmt.Sprint(t) + "/sponsor"}
+	withConfig(t, &ALSConfig{SponsorMessage: "/nonexistent/path/" + fmt.Sprint(t) + "/sponsor"})
 	LoadSponsorMessage()
 
 	if Config.SponsorMessage == "" {
@@ -67,7 +159,7 @@ func TestLoadSponsorMessageFromHTTPSuccess(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	Config = &ALSConfig{SponsorMessage: server.URL}
+	withConfig(t, &ALSConfig{SponsorMessage: server.URL})
 	LoadSponsorMessage()
 
 	if Config.SponsorMessage != "# Sponsor from URL" {
@@ -83,7 +175,7 @@ func TestLoadSponsorMessageFromHTTPNotOK(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	original := server.URL
-	Config = &ALSConfig{SponsorMessage: original}
+	withConfig(t, &ALSConfig{SponsorMessage: original})
 	LoadSponsorMessage()
 
 	// Non-2xx: must keep original URL (no replacement with body).
@@ -96,7 +188,7 @@ func TestLoadSponsorMessageFromHTTPUnreachable(t *testing.T) {
 	// Unroutable address: http.Get must fail, SponsorMessage keeps the
 	// original value.
 
-	Config = &ALSConfig{SponsorMessage: "http://127.0.0.1:1/sponsor"}
+	withConfig(t, &ALSConfig{SponsorMessage: "http://127.0.0.1:1/sponsor"})
 	LoadSponsorMessage()
 
 	if Config.SponsorMessage != "http://127.0.0.1:1/sponsor" {

@@ -1,6 +1,7 @@
 package timer
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
@@ -97,3 +98,52 @@ func TestGetInterfaceCachesSnapshotIndependentCaches(t *testing.T) {
 		t.Errorf("source Caches mutated through snapshot; got %d", src[1].Caches[0][0])
 	}
 }
+
+func TestGetInterfaceCachesSnapshotNilMap(t *testing.T) {
+	withInterfaceCaches(t, nil)
+
+	got := GetInterfaceCachesSnapshot()
+	if len(got) != 0 {
+		t.Errorf("snapshot len = %d; want 0", len(got))
+	}
+}
+
+func TestSetupInterfaceBroadcastContextCancels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		SetupInterfaceBroadcastContext(ctx)
+		close(done)
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SetupInterfaceBroadcastContext did not exit after cancel")
+	}
+}
+
+func TestSetupInterfaceBroadcastPreCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		SetupInterfaceBroadcastContext(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SetupInterfaceBroadcast did not exit when context was pre-canceled")
+	}
+}
+
+// Note: InterfaceTrafficCache struct-level tests were removed --
+// they tested the Go zero-value contract or simple field
+// assignment, not the timer package, and would pass for any struct
+// definition.

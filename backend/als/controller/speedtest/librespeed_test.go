@@ -1,6 +1,7 @@
 package speedtest
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -264,28 +265,64 @@ func TestHandleUploadConsumesBody(t *testing.T) {
 func TestHandleDownloadCkSizeCappedAt1024(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	tests := []struct {
+		name     string
+		ckSize   string
+		wantBody int
+	}{
+		{"above cap 2000", "2000", 1024 * 1048576},
+		{"above cap 9999", "9999", 1024 * 1048576},
+		{"exactly at cap", "1024", 1024 * 1048576},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gin.New()
+			r.GET("/download", HandleDownload)
+
+			server := httptest.NewServer(r)
+			t.Cleanup(server.Close)
+
+			resp, err := http.Get(server.URL + "/download?ckSize=" + tt.ckSize)
+			if err != nil {
+				t.Fatalf("GET failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("status = %d; want 200", resp.StatusCode)
+			}
+
+			buf := make([]byte, 1024)
+			n, _ := resp.Body.Read(buf)
+			if n == 0 {
+				t.Error("response body is empty")
+			}
+		})
+	}
+}
+
+// errReader is an io.Reader that always returns an error.
+type errReader struct{ err error }
+
+func (r errReader) Read(p []byte) (int, error) { return 0, r.err }
+
+// TestHandleUploadBodyReadError exercises the io.Copy error
+// branch in HandleUpload (librespeed.go:42). When the request
+// body returns an error during read, the handler responds 400
+// and does not set the success headers.
+func TestHandleUploadBodyReadError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
 	r := gin.New()
-	r.GET("/download", HandleDownload)
+	r.POST("/upload", HandleUpload)
 
-	server := httptest.NewServer(r)
-	t.Cleanup(server.Close)
+	body := io.NopCloser(errReader{err: errors.New("simulated read failure")})
+	req := httptest.NewRequest(http.MethodPost, "/upload", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
 
-	resp, err := http.Get(server.URL + "/download?ckSize=2000")
-	if err != nil {
-		t.Fatalf("GET failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d; want 200", resp.StatusCode)
-	}
-
-	buf := make([]byte, 1024)
-	n, err := resp.Body.Read(buf)
-	if err != nil {
-		t.Fatalf("failed to read first bytes: %v", err)
-	}
-	if n == 0 {
-		t.Error("response body is empty")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d; want 400; body = %q", w.Code, w.Body.String())
 	}
 }

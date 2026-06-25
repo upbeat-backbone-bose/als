@@ -116,10 +116,8 @@ func TestLoadFromEnvIntFields(t *testing.T) {
 		"UTILITIES_IPERF3_PORT_MIN": "40000",
 		"UTILITIES_IPERF3_PORT_MAX": "50000",
 	})
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -137,10 +135,8 @@ func TestLoadFromEnvIntFieldsInvalidIgnored(t *testing.T) {
 	withEnv(t, map[string]string{
 		"UTILITIES_IPERF3_PORT_MIN": "not-a-number",
 	})
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -160,14 +156,23 @@ func TestLoadFromEnvBoolFields(t *testing.T) {
 		{"anything else sets false", "false", false},
 		{"true is exact match only", "True", false}, // case-sensitive
 		{"numeric 1 is false", "1", false},
+		{"empty string", "", false},
+		{"random text", "yes", false},
+		{"uppercase TRUE", "TRUE", false},
+		{"numeric 0", "0", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			withEnv(t, map[string]string{"UTILITIES_PING": tt.value})
-			Config = GetDefaultConfig()
-			prevInternal := IsInternalCall
-			IsInternalCall = true
-			t.Cleanup(func() { IsInternalCall = prevInternal })
+			// Start from a zero config so bool default is false; tests
+			// using "true" that depends on GetDefaultConfig have their
+			// own dedicated cases.
+			if tt.value == "true" && tt.want {
+				withConfig(t, GetDefaultConfig())
+			} else {
+				withConfig(t, &ALSConfig{})
+			}
+			withInternalCall(t, true)
 
 			LoadFromEnv()
 
@@ -192,10 +197,8 @@ func TestLoadFromEnvAllBoolFields(t *testing.T) {
 		"UTILITIES_TRACEROUTE":      "true",
 	})
 	// Start from a config where everything is false.
-	Config = &ALSConfig{}
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, &ALSConfig{})
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -221,10 +224,8 @@ func TestLoadFromEnvSpeedtestFileList(t *testing.T) {
 	withEnv(t, map[string]string{
 		"SPEEDTEST_FILE_LIST": "1MB 10MB 100MB",
 	})
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -238,10 +239,8 @@ func TestLoadFromEnvSpeedtestFileList(t *testing.T) {
 
 func TestLoadFromEnvEmptyVarsKeepDefaults(t *testing.T) {
 	// No env vars set: Config should equal GetDefaultConfig() after Load().
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -260,10 +259,8 @@ func TestLoadFromEnvEmptyVarsKeepDefaults(t *testing.T) {
 func TestLoadFromEnvLogsWhenNotInternalCall(t *testing.T) {
 	// When IsInternalCall is false the function logs -- we just verify it
 	// does not panic; the log is a side effect we cannot easily assert.
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = false
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, false)
 
 	LoadFromEnv()
 }
@@ -274,9 +271,7 @@ func TestLoad(t *testing.T) {
 	withEnv(t, map[string]string{
 		"LISTEN_IP": "10.0.0.1",
 	})
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withInternalCall(t, true)
 
 	Load()
 
@@ -285,5 +280,86 @@ func TestLoad(t *testing.T) {
 	}
 	if Config.Iperf3StartPort != 30000 {
 		t.Errorf("default port not restored before LoadFromEnv; got %d", Config.Iperf3StartPort)
+	}
+}
+
+func TestLoadFromEnvSpeedtestFileListEmpty(t *testing.T) {
+	withEnv(t, map[string]string{"SPEEDTEST_FILE_LIST": ""})
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
+
+	LoadFromEnv()
+
+	if len(Config.SpeedtestFileList) == 0 {
+		t.Error("empty env var must not overwrite default SpeedtestFileList")
+	}
+}
+
+func TestLoadFromEnvSpeedtestFileListSingleItem(t *testing.T) {
+	withEnv(t, map[string]string{"SPEEDTEST_FILE_LIST": "1GB"})
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
+
+	LoadFromEnv()
+
+	if len(Config.SpeedtestFileList) != 1 {
+		t.Fatalf("len = %d; want 1", len(Config.SpeedtestFileList))
+	}
+	if Config.SpeedtestFileList[0] != "1GB" {
+		t.Errorf("SpeedtestFileList[0] = %q", Config.SpeedtestFileList[0])
+	}
+}
+
+func TestLoadFromEnvIntValidValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{"positive", "50000", 50000},
+		{"zero", "0", 0},
+		{"large", "65535", 65535},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withEnv(t, map[string]string{"UTILITIES_IPERF3_PORT_MIN": tt.value})
+			withConfig(t, GetDefaultConfig())
+			withInternalCall(t, true)
+
+			LoadFromEnv()
+
+			if Config.Iperf3StartPort != tt.want {
+				t.Errorf("Iperf3StartPort = %d; want %d", Config.Iperf3StartPort, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadPreservesEnvOverrides(t *testing.T) {
+	withEnv(t, map[string]string{
+		"LISTEN_IP":   "127.0.0.1",
+		"HTTP_PORT":   "9090",
+		"LOCATION":    "TestCity",
+		"PUBLIC_IPV4": "9.9.9.9",
+		"PUBLIC_IPV6": "fe80::1",
+	})
+	withInternalCall(t, true)
+
+	Load()
+
+	if Config.ListenHost != "127.0.0.1" {
+		t.Errorf("ListenHost = %q", Config.ListenHost)
+	}
+	if Config.ListenPort != "9090" {
+		t.Errorf("ListenPort = %q", Config.ListenPort)
+	}
+	if Config.Location != "TestCity" {
+		t.Errorf("Location = %q", Config.Location)
+	}
+	if Config.PublicIPv4 != "9.9.9.9" {
+		t.Errorf("PublicIPv4 = %q", Config.PublicIPv4)
+	}
+	if Config.PublicIPv6 != "fe80::1" {
+		t.Errorf("PublicIPv6 = %q", Config.PublicIPv6)
 	}
 }

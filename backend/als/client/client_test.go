@@ -84,10 +84,12 @@ func TestRemoveExpiredClients(t *testing.T) {
 	}
 }
 
-func TestRemoveExpiredClientsInvokesCancel(t *testing.T) {
+func TestRemoveExpiredClientsDeletesExpiredSession(t *testing.T) {
 	// RemoveExpiredClients no longer forces cancellation of in-flight
 	// contexts -- the caller that called GetContext owns the cancel.
-	// The session is simply removed from the map.
+	// The session is simply removed from the map. The "InvokesCancel"
+	// suffix in the original test name is misleading; this test pins
+	// the deletion contract only.
 	clearClients()
 
 	Clients["expired"] = &ClientSession{
@@ -154,5 +156,44 @@ func TestGetClientExpiresOnAge(t *testing.T) {
 
 	if _, ok := GetClient("stale"); ok {
 		t.Error("expected stale client to be reported as missing")
+	}
+}
+
+func TestRemoveAllClients(t *testing.T) {
+	clearClients()
+
+	for _, id := range []string{"a", "b", "c"} {
+		Clients[id] = &ClientSession{
+			Channel:   make(chan *Message, 1),
+			CreatedAt: time.Now(),
+		}
+	}
+	if len(Clients) != 3 {
+		t.Fatalf("setup: len(Clients) = %d; want 3", len(Clients))
+	}
+
+	RemoveAllClients()
+	if len(Clients) != 0 {
+		t.Errorf("after RemoveAllClients: len(Clients) = %d; want 0", len(Clients))
+	}
+}
+
+func TestRemoveAllClientsOnEmptyMap(t *testing.T) {
+	clearClients()
+
+	// Calling on an empty (or nil) map must not panic and must
+	// leave the map empty and usable.
+	RemoveAllClients()
+	if len(Clients) != 0 {
+		t.Errorf("len(Clients) = %d; want 0", len(Clients))
+	}
+
+	// Re-add a client and verify the map is still functional.
+	Clients["after-empty"] = &ClientSession{
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now(),
+	}
+	if _, ok := Clients["after-empty"]; !ok {
+		t.Error("map not usable after RemoveAllClients on empty")
 	}
 }

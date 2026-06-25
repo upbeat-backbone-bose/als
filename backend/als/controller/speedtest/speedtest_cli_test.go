@@ -1,11 +1,16 @@
 package speedtest
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samlm0/als/v2/als/client"
 )
 
 // TestHandleSpeedtestDotNetMissingSession covers the 500 path when
@@ -23,4 +28,208 @@ func TestHandleSpeedtestDotNetMissingSession(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d; want 500; body = %s", w.Code, w.Body.String())
 	}
+}
+
+// runQueueHandler starts the package-level queue handler in a
+// goroutine and returns a stop function. The handler exits when
+// stop is called. Tests that exercise the speedtest endpoint must
+// have the queue running because the handler calls client.WaitQueue.
+func runQueueHandler(t *testing.T) func() {
+	t.Helper()
+	client.ResetQueueForTest()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		client.HandleQueue(ctx)
+	}()
+
+	if !client.WaitForHandlerParked(2 * time.Second) {
+		cancel()
+		t.Fatal("queue handler did not reach parked state in time")
+	}
+
+	return func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("queue handler did not exit in time")
+		}
+		client.ResetQueueForTest()
+	}
+}
+
+// TestHandleSpeedtestDotNetSpawnFailsWithoutBinary verifies the
+// 500 path when the speedtest binary is not on PATH. We shadow
+// PATH with an empty directory so the test is deterministic
+// regardless of host state.
+func TestHandleSpeedtestDotNetSpawnFailsWithoutBinary(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	stop := runQueueHandler(t)
+	defer stop()
+
+	emptyDir := t.TempDir()
+	t.Setenv("PATH", emptyDir)
+
+	session := &client.ClientSession{
+		Channel:   make(chan *client.Message, 64),
+		CreatedAt: time.Now(),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	session.SetContext(ctx)
+
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("clientSession", session)
+		c.Next()
+	})
+	r.GET("/probe", HandleSpeedtestDotNet)
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
+	w := httptest.NewRecorder()
+
+	// Bound the request with a deadline so a regression that
+	// hangs the handler is caught.
+	reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer reqCancel()
+	req = req.WithContext(reqCtx)
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d; want 500; body = %s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleSpeedtestDotNetSuccess exercises the full handler
+// path with a fake speedtest binary. The fake prints no output
+// and exits 0, so the handler should return 200.
+func TestHandleSpeedtestDotNetSuccess(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	stop := runQueueHandler(t)
+	defer stop()
+
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "speedtest")
+	script := "#!/bin/sh\nexit 0\n"
+	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake speedtest: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	session := &client.ClientSession{
+		Channel:   make(chan *client.Message, 64),
+		CreatedAt: time.Now(),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	session.SetContext(ctx)
+
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("clientSession", session)
+		c.Next()
+	})
+	r.GET("/probe", HandleSpeedtestDotNet)
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
+	w := httptest.NewRecorder()
+
+	reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer reqCancel()
+	req = req.WithContext(reqCtx)
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d; want 200; body = %s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleSpeedtestDotNetWithNodeID passes a node_id query
+// parameter and verifies the handler accepts it. Uses a fake
+// speedtest that records its args to a file so the test can
+// assert -s NODE_ID appears in argv.
+func TestHandleSpeedtestDotNetWithNodeID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	stop := runQueueHandler(t)
+	defer stop()
+
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "speedtest")
+	argsLog := filepath.Join(dir, "args.log")
+	script := "#!/bin/sh\necho \"$@\" > " + argsLog + "\nexit 0\n"
+	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake speedtest: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	session := &client.ClientSession{
+		Channel:   make(chan *client.Message, 64),
+		CreatedAt: time.Now(),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	session.SetContext(ctx)
+
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("clientSession", session)
+		c.Next()
+	})
+	r.GET("/probe", HandleSpeedtestDotNet)
+
+	req := httptest.NewRequest(http.MethodGet, "/probe?node_id=1234", http.NoBody)
+	w := httptest.NewRecorder()
+
+	reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer reqCancel()
+	req = req.WithContext(reqCtx)
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d; want 200; body = %s", w.Code, w.Body.String())
+	}
+
+	logBytes, err := os.ReadFile(argsLog)
+	if err != nil {
+		t.Fatalf("args.log not written: %v", err)
+	}
+	// contains() is the package-local []string helper. We
+	// tokenise the single-line argv on whitespace so each token
+	// becomes a slice element; -s and 1234 must each appear as
+	// distinct tokens to confirm node_id was passed as a single
+	// argument.
+	tokens := bytesFields(string(logBytes))
+	if !contains(tokens, "-s") || !contains(tokens, "1234") {
+		t.Errorf("args.log = %q; want it to contain tokens '-s' and '1234'", logBytes)
+	}
+}
+
+// bytesFields is a minimal whitespace split. Using the stdlib
+// strings.Fields would require an extra import for one call.
+func bytesFields(s string) []string {
+	var out []string
+	start := -1
+	for i, r := range s {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			if start >= 0 {
+				out = append(out, s[start:i])
+				start = -1
+			}
+		} else if start < 0 {
+			start = i
+		}
+	}
+	if start >= 0 {
+		out = append(out, s[start:])
+	}
+	return out
 }

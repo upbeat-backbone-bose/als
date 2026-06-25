@@ -44,7 +44,6 @@ func (c *ClientSession) GetContext(requestCtx context.Context) context.Context {
 	go func() {
 		// Local references: c.ctx may be reassigned by SetContext
 		// concurrently, so we capture the current parent here.
-		// (See the package doc on c.ctx for the threading model.)
 		parent := c.ctx
 		var parentDone <-chan struct{}
 		if parent != nil {
@@ -75,9 +74,6 @@ func (c *ClientSession) TrySend(msg *Message) bool {
 // or has an unexpected type. Callers should treat the false case as a
 // programming error (middleware not installed) and return 500.
 func SessionFromContext(v any) (*ClientSession, bool) {
-	if v == nil {
-		return nil, false
-	}
 	s, ok := v.(*ClientSession)
 	return s, ok
 }
@@ -108,6 +104,17 @@ func RemoveClient(id string) {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
 	delete(Clients, id)
+}
+
+// RemoveAllClients empties the global Clients map. Test-only: used
+// to isolate tests that broadcast, since the package-level map is
+// otherwise shared across the test binary. Holding the write lock
+// is required to avoid racing with AddClient, RemoveClient, and
+// any code that iterates the map under clientsMu.
+func RemoveAllClients() {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+	Clients = make(map[string]*ClientSession)
 }
 
 // RemoveExpiredClients deletes sessions older than sessionExpireDuration

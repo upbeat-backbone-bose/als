@@ -2,11 +2,12 @@ package client
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/samlm0/als/v2/internal/testutil"
 )
 
 // resetQueueForTest cancels any entries still parked in the queue, clears
@@ -85,7 +86,7 @@ func startHandler(t *testing.T) (stop func()) {
 // time.Sleep-based synchronization.
 func awaitEnqueued(t *testing.T, ctx context.Context) {
 	t.Helper()
-	waitFor(t, 2*time.Second, "context enqueued", func() bool {
+	testutil.WaitFor(t, 2*time.Second, "context enqueued", func() bool {
 		queueLock.Lock()
 		defer queueLock.Unlock()
 		for _, e := range queueEntries {
@@ -188,7 +189,7 @@ func TestHandleQueueSkipsAlreadyDoneHead(t *testing.T) {
 	default:
 	}
 
-	waitFor(t, 2*time.Second, "head removed", func() bool {
+	testutil.WaitFor(t, 2*time.Second, "head removed", func() bool {
 		queueLock.Lock()
 		remaining := len(queueEntries)
 		queueLock.Unlock()
@@ -263,20 +264,12 @@ func TestHandleQueueGracefulShutdownFromOuter(t *testing.T) {
 
 	// Wait for at least one caller to be parked, so the handler is
 	// definitely inside its inner loop or between entries when we cancel.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
+	testutil.WaitFor(t, 2*time.Second, "no callers parked", func() bool {
 		queueLock.Lock()
 		n := len(queueEntries)
 		queueLock.Unlock()
-		if n >= 1 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no callers parked within 2s")
-		}
-		runtime.Gosched()
-		time.Sleep(time.Millisecond)
-	}
+		return n >= 1
+	})
 
 	// Cancel the handler. With non-blocking notifies, the handler is
 	// either in the outer select or between entries where the new
@@ -404,7 +397,7 @@ func TestShutdownQueueReleasesAllWaiters(t *testing.T) {
 	}
 
 	// Wait for all entries to be parked.
-	waitFor(t, 2*time.Second, "all callers parked", func() bool {
+	testutil.WaitFor(t, 2*time.Second, "all callers parked", func() bool {
 		queueLock.Lock()
 		n := len(queueEntries)
 		queueLock.Unlock()
@@ -422,5 +415,81 @@ func TestShutdownQueueReleasesAllWaiters(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("WaitQueue callers did not unblock after ShutdownQueue")
+	}
+}
+
+func TestResetQueueForTest(t *testing.T) {
+	// Pre-populate the queue with a parked entry.
+	enqueueCtx, enqueueCancel := context.WithCancel(context.Background())
+	entry := &queueEntry{ctx: enqueueCtx, cancel: enqueueCancel}
+	queueLock.Lock()
+	queueEntries = append(queueEntries, entry)
+	queueLock.Unlock()
+
+	ResetQueueForTest()
+
+	queueLock.Lock()
+	n := len(queueEntries)
+	queueLock.Unlock()
+	if n != 0 {
+		t.Errorf("after ResetQueueForTest: len(queueEntries) = %d; want 0", n)
+	}
+
+	// The parked entry's queueCtx must be cancelled by the reset
+	// (via ShutdownQueue).
+	select {
+	case <-enqueueCtx.Done():
+	case <-time.After(time.Second):
+		t.Error("parked entry's queueCtx was not cancelled by ResetQueueForTest")
+	}
+}
+
+func TestResetQueueForTestOnEmpty(t *testing.T) {
+	// Calling reset on an empty queue must not panic and must
+	// leave the queue empty.
+	queueLock.Lock()
+	queueEntries = nil
+	queueLock.Unlock()
+	for {
+		select {
+		case <-queueWakeup:
+		default:
+			goto drained
+		}
+	}
+drained:
+
+	ResetQueueForTest()
+
+	queueLock.Lock()
+	n := len(queueEntries)
+	queueLock.Unlock()
+	if n != 0 {
+		t.Errorf("after ResetQueueForTest on empty: len = %d; want 0", n)
+	}
+}
+
+func TestWaitForHandlerParkedTimeoutWithoutHandler(t *testing.T) {
+	// No handler is running. queueWakeup is unbuffered and the
+	// goroutine inside WaitForHandlerParked blocks forever on
+	// the first send. The outer select must time out and return
+	// false within the deadline.
+	//
+	// Skip if the channel is somehow buffered (defensive: the
+	// production declaration is unbuffered).
+	if cap(queueWakeup) != 0 {
+		t.Skip("queueWakeup is unexpectedly buffered; cannot exercise the timeout path")
+	}
+
+	start := time.Now()
+	if WaitForHandlerParked(100 * time.Millisecond) {
+		t.Fatal("WaitForHandlerParked returned true with no handler; want timeout")
+	}
+	elapsed := time.Since(start)
+	if elapsed < 50*time.Millisecond {
+		t.Errorf("returned too fast: %v; expected ~100ms", elapsed)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("returned too slow: %v; expected ~100ms", elapsed)
 	}
 }

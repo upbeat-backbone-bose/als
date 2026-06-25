@@ -86,12 +86,6 @@ func TestUpdateSystemResourceExitsOnCancelBeforeTick(t *testing.T) {
 // clearTestClients resets the client map for tests that broadcast.
 func clearTestClients(t *testing.T) {
 	t.Helper()
-	for id := range client.Clients {
-		client.RemoveClient(id)
-	}
-	t.Cleanup(func() {
-		for id := range client.Clients {
-			client.RemoveClient(id)
-		}
-	})
+	client.RemoveAllClients()
+	t.Cleanup(client.RemoveAllClients)
 }
