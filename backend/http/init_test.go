@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// waitFor spins until cond returns true or timeout elapses. Replaces
+// the legacy time.Sleep(time.Millisecond) pattern. See als/client/wait_helpers_test.go
+// for the canonical implementation; this is duplicated to keep
+// the test packages independent.
+//
+// linter's per-file analysis can't see across files.
+//
+//nolint:unparam // each call site picks a different timeout; the
+func waitFor(t *testing.T, timeout time.Duration, msg string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		if cond() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("waitFor timed out after %v: %s", timeout, msg)
+		}
+		select {
+		case <-tick.C:
+		default:
+			runtime.Gosched()
+		}
+	}
+}
 
 func TestCreateServer(t *testing.T) {
 	s := CreateServer()
@@ -96,15 +125,12 @@ func TestStartAndShutdown(t *testing.T) {
 		}
 	}()
 
-	for {
+	waitFor(t, 5*time.Second, "httpServer set", func() bool {
 		s.mu.Lock()
 		ready := s.httpServer != nil
 		s.mu.Unlock()
-		if ready {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+		return ready
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -132,15 +158,12 @@ func TestStartRejectsDoubleStart(t *testing.T) {
 		}
 	}()
 
-	for {
+	waitFor(t, 5*time.Second, "first httpServer set", func() bool {
 		s.mu.Lock()
 		ready := s.httpServer != nil
 		s.mu.Unlock()
-		if ready {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+		return ready
+	})
 
 	// Capture the first server reference so we can verify it is not
 	// replaced by a subsequent double-Start attempt.
