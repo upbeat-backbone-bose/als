@@ -1,6 +1,7 @@
 package speedtest
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -298,5 +299,30 @@ func TestHandleDownloadCkSizeCappedAt1024(t *testing.T) {
 				t.Error("response body is empty")
 			}
 		})
+	}
+}
+
+// errReader is an io.Reader that always returns an error.
+type errReader struct{ err error }
+
+func (r errReader) Read(p []byte) (int, error) { return 0, r.err }
+
+// TestHandleUploadBodyReadError exercises the io.Copy error
+// branch in HandleUpload (librespeed.go:42). When the request
+// body returns an error during read, the handler responds 400
+// and does not set the success headers.
+func TestHandleUploadBodyReadError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	r := gin.New()
+	r.POST("/upload", HandleUpload)
+
+	body := io.NopCloser(errReader{err: errors.New("simulated read failure")})
+	req := httptest.NewRequest(http.MethodPost, "/upload", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d; want 400; body = %q", w.Code, w.Body.String())
 	}
 }

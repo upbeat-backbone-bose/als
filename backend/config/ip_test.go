@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -148,5 +149,31 @@ func TestGetPublicIPViaHttpSkipsUnreachable(t *testing.T) {
 	}
 	if ip != "5.6.7.8" {
 		t.Errorf("ip = %q; want 5.6.7.8", ip)
+	}
+}
+
+// TestGetPublicIPv4ViaHttpWrapperRuns exercises the IPv4 wrapper.
+// The wrapper creates its own client with a 5s timeout and
+// forces IPv4 dialing. We cannot inject a transport (the client
+// is built inside the function), so we run it as-is and assert
+// that it returns a valid IPv4 address without error.
+//
+// In sandboxed environments without external connectivity, the
+// function will return an error -- we treat that as a soft skip
+// rather than a hard failure.
+func TestGetPublicIPv4ViaHttpWrapperRuns(t *testing.T) {
+	t.Parallel()
+
+	ip, err := getPublicIPv4ViaHttp()
+	if err != nil {
+		t.Skipf("getPublicIPv4ViaHttp requires external connectivity: %v", err)
+	}
+
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		t.Fatalf("getPublicIPv4ViaHttp returned %q; not a valid IP", ip)
+	}
+	if v4 := parsed.To4(); v4 == nil {
+		t.Errorf("getPublicIPv4ViaHttp returned %q; expected IPv4 (the wrapper forces tcp4 dial)", ip)
 	}
 }

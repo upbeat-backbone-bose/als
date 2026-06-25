@@ -57,6 +57,59 @@ func TestLoadWebConfigIPLookupSkippedWhenBothSet(t *testing.T) {
 	if Config.Location != "Earth" {
 		t.Errorf("Location = %q; want unchanged", Config.Location)
 	}
+
+	// iperf3 is not on PATH (empty safety-net dir): the
+	// LoadWebConfig must detect this and set FeatureIperf3=false.
+	if Config.FeatureIperf3 {
+		t.Error("FeatureIperf3 = true; want false (iperf3 is not on PATH)")
+	}
+}
+
+// TestLoadWebConfigIperf3OnPathPreemptsOverride covers the path
+// where iperf3 IS on PATH. We drop a fake iperf3 binary into a
+// temp dir and prepend it to PATH, then assert FeatureIperf3
+// remains true after LoadWebConfig.
+//
+// This pins the inverse of the "not on PATH" path: a regression
+// that unconditionally clears FeatureIperf3 would be caught.
+func TestLoadWebConfigIperf3OnPathPreemptsOverride(t *testing.T) {
+	prev := Config
+	Config = &ALSConfig{}
+	t.Cleanup(func() { Config = prev })
+	prevInternal := IsInternalCall
+	IsInternalCall = true
+	t.Cleanup(func() { IsInternalCall = prevInternal })
+
+	withEnv(t, map[string]string{
+		"PUBLIC_IPV4": "1.2.3.4",
+		"PUBLIC_IPV6": "::1",
+	})
+
+	// Drop a fake iperf3 onto PATH.
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "iperf3")
+	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake iperf3: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// Same safety net for the IP-lookup goroutine.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected outbound HTTP request to %s", r.URL.String())
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	installTestTransport(t, server.URL)
+
+	// Pre-set FeatureIperf3=true so we can verify the path
+	// where iperf3 IS available does not clear it.
+	Config.FeatureIperf3 = true
+
+	LoadWebConfig()
+
+	if !Config.FeatureIperf3 {
+		t.Error("FeatureIperf3 = false; want true (iperf3 is on PATH)")
+	}
 }
 
 func TestLoadSponsorMessageEmpty(t *testing.T) {

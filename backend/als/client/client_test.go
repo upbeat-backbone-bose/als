@@ -158,3 +158,42 @@ func TestGetClientExpiresOnAge(t *testing.T) {
 		t.Error("expected stale client to be reported as missing")
 	}
 }
+
+func TestRemoveAllClients(t *testing.T) {
+	clearClients()
+
+	for _, id := range []string{"a", "b", "c"} {
+		Clients[id] = &ClientSession{
+			Channel:   make(chan *Message, 1),
+			CreatedAt: time.Now(),
+		}
+	}
+	if len(Clients) != 3 {
+		t.Fatalf("setup: len(Clients) = %d; want 3", len(Clients))
+	}
+
+	RemoveAllClients()
+	if len(Clients) != 0 {
+		t.Errorf("after RemoveAllClients: len(Clients) = %d; want 0", len(Clients))
+	}
+}
+
+func TestRemoveAllClientsOnEmptyMap(t *testing.T) {
+	clearClients()
+
+	// Calling on an empty (or nil) map must not panic and must
+	// leave the map empty and usable.
+	RemoveAllClients()
+	if len(Clients) != 0 {
+		t.Errorf("len(Clients) = %d; want 0", len(Clients))
+	}
+
+	// Re-add a client and verify the map is still functional.
+	Clients["after-empty"] = &ClientSession{
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now(),
+	}
+	if _, ok := Clients["after-empty"]; !ok {
+		t.Error("map not usable after RemoveAllClients on empty")
+	}
+}
