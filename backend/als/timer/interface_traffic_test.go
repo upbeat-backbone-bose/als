@@ -1,6 +1,7 @@
 package timer
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
@@ -95,5 +96,82 @@ func TestGetInterfaceCachesSnapshotIndependentCaches(t *testing.T) {
 
 	if src[1].Caches[0][0] != 1 {
 		t.Errorf("source Caches mutated through snapshot; got %d", src[1].Caches[0][0])
+	}
+}
+
+func TestGetInterfaceCachesSnapshotNilMap(t *testing.T) {
+	withInterfaceCaches(t, nil)
+
+	got := GetInterfaceCachesSnapshot()
+	if len(got) != 0 {
+		t.Errorf("snapshot len = %d; want 0", len(got))
+	}
+}
+
+func TestSetupInterfaceBroadcastContextCancels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		SetupInterfaceBroadcastContext(ctx)
+		close(done)
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SetupInterfaceBroadcastContext did not exit after cancel")
+	}
+}
+
+func TestSetupInterfaceBroadcastPreCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		SetupInterfaceBroadcastContext(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SetupInterfaceBroadcast did not exit when context was pre-canceled")
+	}
+}
+
+func TestInterfaceTrafficCacheDefaults(t *testing.T) {
+	cache := &InterfaceTrafficCache{}
+	if cache.InterfaceName != "" {
+		t.Errorf("InterfaceName = %q; want empty", cache.InterfaceName)
+	}
+	if !cache.LastCacheTime.IsZero() {
+		t.Errorf("LastCacheTime = %v; want zero", cache.LastCacheTime)
+	}
+	if cache.Caches != nil {
+		t.Errorf("Caches = %v; want nil", cache.Caches)
+	}
+	if cache.LastRx != 0 || cache.LastTx != 0 {
+		t.Errorf("counters = (%d,%d); want (0,0)", cache.LastRx, cache.LastTx)
+	}
+}
+
+func TestInterfaceTrafficCacheFields(t *testing.T) {
+	now := time.Now()
+	cache := &InterfaceTrafficCache{
+		InterfaceName: "eth0",
+		LastCacheTime: now,
+		Caches:        [][3]uint64{{1, 2, 3}},
+		LastRx:        100,
+		LastTx:        200,
+	}
+	if cache.InterfaceName != "eth0" {
+		t.Errorf("InterfaceName = %q; want eth0", cache.InterfaceName)
+	}
+	if cache.LastRx != 100 || cache.LastTx != 200 {
+		t.Errorf("counters = (%d,%d); want (100,200)", cache.LastRx, cache.LastTx)
 	}
 }

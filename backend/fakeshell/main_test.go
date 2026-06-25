@@ -6,24 +6,61 @@ import (
 	"github.com/reeflective/console"
 )
 
-// TestExitCtrlDCallsOsExit cannot be unit-tested directly: exitCtrlD
-// calls os.Exit(0) which terminates the test process. The behaviour
-// is documented here so the intent is captured even though the
-// test must skip.
-
-// We instead verify the helper is wired into console via reflection
-// of the package -- but since console.Menu does not expose its
-// interrupt handlers publicly, this verification would require an
-// end-to-end run of HandleConsole which spawns a console app.
-//
-// Skipped: the path is exercised by manual invocation and the
-// os.Exit behaviour is intentional.
-
 func TestExitCtrlDIsCallable(t *testing.T) {
-	// exitCtrlD is a function variable in fakeshell/main.go. We do not
-	// invoke it because it would terminate the test binary. The
-	// presence of the symbol is verified at compile time.
 	var fn func(*console.Console) = nil
 	_ = fn
 	t.Log("exitCtrlD is reachable via HandleConsole's interrupt setup; not exercised here")
+}
+
+func TestSetupPromptSetsAllOptions(t *testing.T) {
+	app := console.New("test-app")
+	m := app.ActiveMenu()
+	setupPrompt(m)
+
+	p := m.Prompt()
+	if p == nil {
+		t.Fatal("prompt is nil after setupPrompt")
+	}
+	if p.Primary == nil {
+		t.Error("Primary prompt function not set")
+	}
+	if p.Secondary == nil {
+		t.Error("Secondary prompt function not set")
+	}
+	if p.Transient == nil {
+		t.Error("Transient prompt function not set")
+	}
+}
+
+func TestSetupPromptPrimaryReturnsNonEmpty(t *testing.T) {
+	app := console.New("test-app")
+	m := app.ActiveMenu()
+	setupPrompt(m)
+
+	primary := m.Prompt().Primary()
+	if primary == "" {
+		t.Error("Primary prompt must not be empty")
+	}
+}
+
+func TestSetupPromptSecondaryReturnsNonEmpty(t *testing.T) {
+	app := console.New("test-app")
+	m := app.ActiveMenu()
+	setupPrompt(m)
+
+	secondary := m.Prompt().Secondary()
+	if secondary == "" {
+		t.Error("Secondary prompt must not be empty")
+	}
+}
+
+func TestSetupPromptTransientReturnsNonEmpty(t *testing.T) {
+	app := console.New("test-app")
+	m := app.ActiveMenu()
+	setupPrompt(m)
+
+	transient := m.Prompt().Transient()
+	if transient == "" {
+		t.Error("Transient prompt must not be empty")
+	}
 }

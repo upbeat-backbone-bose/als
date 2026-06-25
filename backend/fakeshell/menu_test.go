@@ -129,3 +129,36 @@ func TestDefineMenuCommandsPingFilter(t *testing.T) {
 		t.Errorf("dangerous flag -f should have been blocked; args.log = %q", logBytes)
 	}
 }
+
+func TestDefineMenuCommandsRootDefaults(t *testing.T) {
+	prev := config.Config
+	config.Config = &config.ALSConfig{}
+	t.Cleanup(func() { config.Config = prev })
+
+	factory := defineMenuCommands()
+	root := factory()
+
+	if root.CompletionOptions.DisableDefaultCmd != true {
+		t.Error("DisableDefaultCmd must be true")
+	}
+	if root.DisableFlagsInUseLine != true {
+		t.Error("DisableFlagsInUseLine must be true")
+	}
+}
+
+func TestDefineMenuCommandsHasDefaultHelp(t *testing.T) {
+	prev := config.Config
+	config.Config = &config.ALSConfig{}
+	t.Cleanup(func() { config.Config = prev })
+
+	factory := defineMenuCommands()
+	root := factory()
+
+	help, _, err := root.Find([]string{"help"})
+	if err != nil {
+		t.Fatalf("Find(help) error: %v", err)
+	}
+	if help == nil {
+		t.Fatal("help command not found")
+	}
+}

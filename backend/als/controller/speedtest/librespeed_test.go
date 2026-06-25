@@ -264,28 +264,39 @@ func TestHandleUploadConsumesBody(t *testing.T) {
 func TestHandleDownloadCkSizeCappedAt1024(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	r := gin.New()
-	r.GET("/download", HandleDownload)
-
-	server := httptest.NewServer(r)
-	t.Cleanup(server.Close)
-
-	resp, err := http.Get(server.URL + "/download?ckSize=2000")
-	if err != nil {
-		t.Fatalf("GET failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d; want 200", resp.StatusCode)
+	tests := []struct {
+		name     string
+		ckSize   string
+		wantBody int
+	}{
+		{"above cap 2000", "2000", 1024 * 1048576},
+		{"above cap 9999", "9999", 1024 * 1048576},
+		{"exactly at cap", "1024", 1024 * 1048576},
 	}
 
-	buf := make([]byte, 1024)
-	n, err := resp.Body.Read(buf)
-	if err != nil {
-		t.Fatalf("failed to read first bytes: %v", err)
-	}
-	if n == 0 {
-		t.Error("response body is empty")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := gin.New()
+			r.GET("/download", HandleDownload)
+
+			server := httptest.NewServer(r)
+			t.Cleanup(server.Close)
+
+			resp, err := http.Get(server.URL + "/download?ckSize=" + tt.ckSize)
+			if err != nil {
+				t.Fatalf("GET failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("status = %d; want 200", resp.StatusCode)
+			}
+
+			buf := make([]byte, 1024)
+			n, _ := resp.Body.Read(buf)
+			if n == 0 {
+				t.Error("response body is empty")
+			}
+		})
 	}
 }

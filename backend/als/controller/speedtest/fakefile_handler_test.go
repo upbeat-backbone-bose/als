@@ -122,3 +122,26 @@ func TestHandleFakeFileNotInAllowlist(t *testing.T) {
 		t.Errorf("status = %d; want 404", w.Code)
 	}
 }
+
+func TestHandleFakeFileInvalidFormatReturns404(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	prev := config.Config
+	config.Config = &config.ALSConfig{SpeedtestFileList: []string{"1MB"}}
+	t.Cleanup(func() { config.Config = prev })
+
+	r := gin.New()
+	r.GET("/file/:filename", HandleFakeFile)
+
+	tests := []string{"1MB.txt", "something.test", "test", ""}
+	for _, filename := range tests {
+		t.Run(filename, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/file/"+filename, http.NoBody)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("filename=%q: status = %d; want 404", filename, w.Code)
+			}
+		})
+	}
+}
