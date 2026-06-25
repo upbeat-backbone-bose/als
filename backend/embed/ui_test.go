@@ -27,10 +27,18 @@ func TestUIStaticFilesDeclared(t *testing.T) {
 	}
 }
 
-// TestUIStaticFilesHaveCoreAssets verifies the four files that the
-// router relies on (index.html, favicon.ico, speedtest_worker.js,
-// placeholder.html) are all embedded. A regression that drops one
-// of these would silently break the UI.
+// TestUIStaticFilesHaveCoreAssets verifies the files the runtime
+// depends on. Three are loaded by the router (index.html,
+// favicon.ico, speedtest_worker.js); placeholder.html is a
+// compile-time fixture, not a runtime asset, but its absence
+// breaks //go:embed and thus the entire build. We assert on it
+// here so a regression that deletes it is caught at unit-test
+// time instead of at the next CI build.
+//
+// This test cannot distinguish between the placeholder and a
+// real UI artifact -- both filenames are identical. The real
+// guard is in the build pipeline (CI runs build-ui before
+// backend-lint), not in unit tests.
 func TestUIStaticFilesHaveCoreAssets(t *testing.T) {
 	required := []string{
 		"ui/index.html",
@@ -42,5 +50,23 @@ func TestUIStaticFilesHaveCoreAssets(t *testing.T) {
 		if _, err := fs.ReadFile(UIStaticFiles, name); err != nil {
 			t.Errorf("missing embedded asset %q: %v", name, err)
 		}
+	}
+}
+
+// TestPlaceholderHTMLIsMarkerAsset locks the contract that
+// placeholder.html is the compile-time marker file. We assert on
+// the size and content fingerprint so a future contributor who
+// rewrites the placeholder to ship a half-built UI by accident
+// gets caught here. If the placeholder is intentionally replaced
+// with a different marker, update both this test and the comment
+// in commit 77bae70 that introduced the file.
+func TestPlaceholderHTMLIsMarkerAsset(t *testing.T) {
+	data, err := fs.ReadFile(UIStaticFiles, "ui/placeholder.html")
+	if err != nil {
+		t.Fatalf("placeholder.html missing: %v", err)
+	}
+	const want = "<!doctype html>\n<meta charset=utf-8>\n<title>ALS</title>\n<p>UI not built — run the frontend build (npm run build in ui/) in CI.</p>\n"
+	if string(data) != want {
+		t.Errorf("placeholder.html content drifted; the marker asset must remain a minimal stub so it does not masquerade as a real UI build. got %q want %q", string(data), want)
 	}
 }
