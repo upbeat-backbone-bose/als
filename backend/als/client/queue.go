@@ -13,9 +13,9 @@ type queueEntry struct {
 
 var (
 	queueLock         sync.Mutex
-	queueEntries      []*queueEntry         // ordered slice for FIFO
-	queueWakeup       = make(chan struct{}) // signal to HandleQueue
-	queueShutdown     = make(chan struct{}) // closed once on shutdown
+	queueEntries      []*queueEntry            // ordered slice for FIFO
+	queueWakeup       = make(chan struct{}, 1) // signal to HandleQueue; capacity 1 prevents lost wakeups
+	queueShutdown     = make(chan struct{})    // closed once on shutdown
 	queueShutdownOnce sync.Once
 )
 
@@ -109,6 +109,18 @@ func HandleQueue(ctx context.Context) {
 	// goroutine truly exits.
 	defer ShutdownQueue()
 	for {
+		// Double-check: entries may have arrived between the inner
+		// loop's last Unlock and the outer select. WaitQueue sends
+		// wakeup via a non-blocking channel write that drops when
+		// HandleQueue is not parked. Re-checking under lock catches
+		// these stragglers without needing an extra wakeup signal.
+		queueLock.Lock()
+		if len(queueEntries) > 0 {
+			queueLock.Unlock()
+			goto drain
+		}
+		queueLock.Unlock()
+
 		select {
 		case <-ctx.Done():
 			ShutdownQueue()
@@ -116,6 +128,7 @@ func HandleQueue(ctx context.Context) {
 		case <-queueWakeup:
 		}
 
+	drain:
 		for {
 			// Take the head of queue (FIFO)
 			queueLock.Lock()
