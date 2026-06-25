@@ -12,9 +12,11 @@ type queueEntry struct {
 }
 
 var (
-	queueLock    sync.Mutex
-	queueEntries []*queueEntry         // ordered slice for FIFO
-	queueWakeup  = make(chan struct{}) // signal to HandleQueue
+	queueLock         sync.Mutex
+	queueEntries      []*queueEntry         // ordered slice for FIFO
+	queueWakeup       = make(chan struct{}) // signal to HandleQueue
+	queueShutdown     = make(chan struct{}) // closed once on shutdown
+	queueShutdownOnce sync.Once
 )
 
 func WaitQueue(ctx context.Context, cb func()) {
@@ -54,17 +56,24 @@ func WaitQueue(ctx context.Context, cb func()) {
 	default:
 	}
 
-	// Block until queueCtx is cancelled (by HandleQueue) or parent ctx is done
+	// Block until queueCtx is cancelled (by HandleQueue), parent ctx is
+	// done, or the queue itself is shut down.
 	select {
 	case <-queueCtx.Done():
 	case <-ctx.Done():
+	case <-queueShutdown:
 	}
 }
 
 // ShutdownQueue cancels every entry's queueCtx so parked WaitQueue calls
-// unblock immediately. Used during graceful shutdown to release callers
-// even if their parent ctx is still alive.
+// unblock immediately.  It also closes queueShutdown so that callers who
+// enqueue after the shutdown begins — a window that exists because
+// ShutdownQueue releases queueLock before the caller's goroutine truly
+// returns — unblock through the closed channel rather than waiting
+// forever on a queueCtx that will never be cancelled.
 func ShutdownQueue() {
+	queueShutdownOnce.Do(func() { close(queueShutdown) })
+
 	queueLock.Lock()
 	defer queueLock.Unlock()
 	for _, e := range queueEntries {
@@ -91,6 +100,14 @@ func GetQueuePositionByCtx(ctx context.Context) (position, total int) {
 // Cancellation makes the outer loop exit promptly; in-flight entries
 // already being processed are allowed to finish.
 func HandleQueue(ctx context.Context) {
+	// Safety net: when HandleQueue returns, cancel every entry still
+	// parked in the queue.  The explicit ShutdownQueue calls below
+	// release entries that are visible at the moment ctx is cancelled;
+	// this deferred call catches stragglers that enqueue between the
+	// explicit call and the function epilogue — a window that exists
+	// because ShutdownQueue releases the lock before HandleQueue's
+	// goroutine truly exits.
+	defer ShutdownQueue()
 	for {
 		select {
 		case <-ctx.Done():
