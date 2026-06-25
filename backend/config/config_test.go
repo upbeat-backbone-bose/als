@@ -116,10 +116,8 @@ func TestLoadFromEnvIntFields(t *testing.T) {
 		"UTILITIES_IPERF3_PORT_MIN": "40000",
 		"UTILITIES_IPERF3_PORT_MAX": "50000",
 	})
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -137,10 +135,8 @@ func TestLoadFromEnvIntFieldsInvalidIgnored(t *testing.T) {
 	withEnv(t, map[string]string{
 		"UTILITIES_IPERF3_PORT_MIN": "not-a-number",
 	})
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -172,13 +168,11 @@ func TestLoadFromEnvBoolFields(t *testing.T) {
 			// using "true" that depends on GetDefaultConfig have their
 			// own dedicated cases.
 			if tt.value == "true" && tt.want {
-				Config = GetDefaultConfig()
+				withConfig(t, GetDefaultConfig())
 			} else {
-				Config = &ALSConfig{}
+				withConfig(t, &ALSConfig{})
 			}
-			prevInternal := IsInternalCall
-			IsInternalCall = true
-			t.Cleanup(func() { IsInternalCall = prevInternal })
+			withInternalCall(t, true)
 
 			LoadFromEnv()
 
@@ -203,10 +197,8 @@ func TestLoadFromEnvAllBoolFields(t *testing.T) {
 		"UTILITIES_TRACEROUTE":      "true",
 	})
 	// Start from a config where everything is false.
-	Config = &ALSConfig{}
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, &ALSConfig{})
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -232,10 +224,8 @@ func TestLoadFromEnvSpeedtestFileList(t *testing.T) {
 	withEnv(t, map[string]string{
 		"SPEEDTEST_FILE_LIST": "1MB 10MB 100MB",
 	})
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -249,10 +239,8 @@ func TestLoadFromEnvSpeedtestFileList(t *testing.T) {
 
 func TestLoadFromEnvEmptyVarsKeepDefaults(t *testing.T) {
 	// No env vars set: Config should equal GetDefaultConfig() after Load().
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -271,10 +259,8 @@ func TestLoadFromEnvEmptyVarsKeepDefaults(t *testing.T) {
 func TestLoadFromEnvLogsWhenNotInternalCall(t *testing.T) {
 	// When IsInternalCall is false the function logs -- we just verify it
 	// does not panic; the log is a side effect we cannot easily assert.
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = false
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, false)
 
 	LoadFromEnv()
 }
@@ -285,9 +271,7 @@ func TestLoad(t *testing.T) {
 	withEnv(t, map[string]string{
 		"LISTEN_IP": "10.0.0.1",
 	})
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withInternalCall(t, true)
 
 	Load()
 
@@ -301,10 +285,8 @@ func TestLoad(t *testing.T) {
 
 func TestLoadFromEnvSpeedtestFileListEmpty(t *testing.T) {
 	withEnv(t, map[string]string{"SPEEDTEST_FILE_LIST": ""})
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -315,10 +297,8 @@ func TestLoadFromEnvSpeedtestFileListEmpty(t *testing.T) {
 
 func TestLoadFromEnvSpeedtestFileListSingleItem(t *testing.T) {
 	withEnv(t, map[string]string{"SPEEDTEST_FILE_LIST": "1GB"})
-	Config = GetDefaultConfig()
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withConfig(t, GetDefaultConfig())
+	withInternalCall(t, true)
 
 	LoadFromEnv()
 
@@ -343,10 +323,8 @@ func TestLoadFromEnvIntValidValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			withEnv(t, map[string]string{"UTILITIES_IPERF3_PORT_MIN": tt.value})
-			Config = GetDefaultConfig()
-			prevInternal := IsInternalCall
-			IsInternalCall = true
-			t.Cleanup(func() { IsInternalCall = prevInternal })
+			withConfig(t, GetDefaultConfig())
+			withInternalCall(t, true)
 
 			LoadFromEnv()
 
@@ -365,9 +343,7 @@ func TestLoadPreservesEnvOverrides(t *testing.T) {
 		"PUBLIC_IPV4": "9.9.9.9",
 		"PUBLIC_IPV6": "fe80::1",
 	})
-	prevInternal := IsInternalCall
-	IsInternalCall = true
-	t.Cleanup(func() { IsInternalCall = prevInternal })
+	withInternalCall(t, true)
 
 	Load()
 

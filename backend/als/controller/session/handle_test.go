@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -16,34 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/samlm0/als/v2/als/client"
 	"github.com/samlm0/als/v2/config"
+	"github.com/samlm0/als/v2/internal/testutil"
 )
-
-// waitFor spins until cond returns true or timeout elapses. Replaces
-// the legacy time.Sleep-based polling. See als/client/wait_helpers_test.go
-// for the canonical version.
-//
-// linter's per-file analysis can't see across files.
-//
-//nolint:unparam // each call site picks a different timeout; the
-func waitFor(t *testing.T, timeout time.Duration, msg string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	tick := time.NewTicker(time.Millisecond)
-	defer tick.Stop()
-	for {
-		if cond() {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("waitFor timed out after %v: %s", timeout, msg)
-		}
-		select {
-		case <-tick.C:
-		default:
-			runtime.Gosched()
-		}
-	}
-}
 
 // stubConfigGetter replaces configGetter for the duration of t.
 func stubConfigGetter(t *testing.T, cfg *config.ALSConfig) {
@@ -157,7 +130,7 @@ func TestHandleRegistersAndRemovesClient(t *testing.T) {
 	}()
 
 	// Phase 1: the session must be registered in the global map.
-	waitFor(t, time.Second, "Handle registered a session", func() bool {
+	testutil.WaitFor(t, time.Second, "Handle registered a session", func() bool {
 		client.ClientsMu().RLock()
 		defer client.ClientsMu().RUnlock()
 		return len(client.Clients) > 0
@@ -172,7 +145,7 @@ func TestHandleRegistersAndRemovesClient(t *testing.T) {
 		t.Fatal("Handle did not exit after ctx cancel")
 	}
 
-	waitFor(t, time.Second, "session removed", func() bool {
+	testutil.WaitFor(t, time.Second, "session removed", func() bool {
 		client.ClientsMu().RLock()
 		n := len(client.Clients)
 		client.ClientsMu().RUnlock()
@@ -213,7 +186,7 @@ func TestHandleStreamsCustomEvent(t *testing.T) {
 
 	// Wait until Handle has registered the session in the global map.
 	var session *client.ClientSession
-	waitFor(t, time.Second, "Handle registered a session", func() bool {
+	testutil.WaitFor(t, time.Second, "Handle registered a session", func() bool {
 		client.ClientsMu().RLock()
 		defer client.ClientsMu().RUnlock()
 		for _, s := range client.Clients {
@@ -234,7 +207,7 @@ func TestHandleStreamsCustomEvent(t *testing.T) {
 	}
 
 	// Wait until the SSE body contains our event.
-	waitFor(t, time.Second, "Ping event streamed", func() bool {
+	testutil.WaitFor(t, time.Second, "Ping event streamed", func() bool {
 		body := bodyBuf.String()
 		return strings.Contains(body, "event:Ping") &&
 			strings.Contains(body, "data:pong")
@@ -273,7 +246,7 @@ func TestHandleExitsWhenChannelCloses(t *testing.T) {
 
 	// Wait for the session to be registered, then close its channel.
 	var session *client.ClientSession
-	waitFor(t, time.Second, "Handle registered a session", func() bool {
+	testutil.WaitFor(t, time.Second, "Handle registered a session", func() bool {
 		client.ClientsMu().RLock()
 		defer client.ClientsMu().RUnlock()
 		for _, s := range client.Clients {

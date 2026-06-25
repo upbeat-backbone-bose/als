@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 type queueEntry struct {
@@ -70,6 +71,45 @@ func ShutdownQueue() {
 	for _, e := range queueEntries {
 		if e != nil && e.cancel != nil {
 			e.cancel()
+		}
+	}
+}
+
+// WaitForHandlerParked is a test-only helper that signals
+// queueWakeup twice and waits for both sends to complete, which
+// only succeeds once the HandleQueue goroutine is parked on its
+// outer <-queueWakeup select. Callers should run their HandleQueue
+// goroutine before calling this. Returns true on success, false
+// on timeout.
+func WaitForHandlerParked(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		queueWakeup <- struct{}{}
+		queueWakeup <- struct{}{}
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(time.Until(deadline)):
+		return false
+	}
+}
+
+// ResetQueueForTest is a test-only helper that cancels any pending
+// entries and clears the queue slice plus drains the wakeup
+// channel. It is safe to call from any package's _test.go.
+func ResetQueueForTest() {
+	ShutdownQueue()
+	queueLock.Lock()
+	queueEntries = nil
+	queueLock.Unlock()
+	for {
+		select {
+		case <-queueWakeup:
+		default:
+			return
 		}
 	}
 }

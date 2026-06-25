@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/samlm0/als/v2/internal/testutil"
 )
 
 // resetQueueForTest cancels any entries still parked in the queue, clears
@@ -80,7 +82,7 @@ func startHandler(t *testing.T) (stop func()) {
 // time.Sleep-based synchronization.
 func awaitEnqueued(t *testing.T, ctx context.Context) {
 	t.Helper()
-	waitFor(t, 2*time.Second, "context enqueued", func() bool {
+	testutil.WaitFor(t, 2*time.Second, "context enqueued", func() bool {
 		queueLock.Lock()
 		defer queueLock.Unlock()
 		for _, e := range queueEntries {
@@ -183,7 +185,7 @@ func TestHandleQueueSkipsAlreadyDoneHead(t *testing.T) {
 	default:
 	}
 
-	waitFor(t, 2*time.Second, "head removed", func() bool {
+	testutil.WaitFor(t, 2*time.Second, "head removed", func() bool {
 		queueLock.Lock()
 		remaining := len(queueEntries)
 		queueLock.Unlock()
@@ -399,7 +401,7 @@ func TestShutdownQueueReleasesAllWaiters(t *testing.T) {
 	}
 
 	// Wait for all entries to be parked.
-	waitFor(t, 2*time.Second, "all callers parked", func() bool {
+	testutil.WaitFor(t, 2*time.Second, "all callers parked", func() bool {
 		queueLock.Lock()
 		n := len(queueEntries)
 		queueLock.Unlock()

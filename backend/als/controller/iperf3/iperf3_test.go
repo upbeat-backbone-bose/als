@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -92,15 +91,11 @@ func TestHandleClientDisconnected(t *testing.T) {
 }
 
 // TestHandleSpawnsAndFailsWithoutIperf3 exercises the path where
-// iperf3 binary is not installed. The handler picks a port, sends
-// to the session, then tries to spawn iperf3 which fails because
-// the binary is missing. We assert the handler returns the expected
-// error code.
+// iperf3 binary is not installed. We shadow PATH with a temp dir
+// that has no iperf3 binary so the test is deterministic regardless
+// of host. The handler picks a port, sends to the session, then
+// tries to spawn iperf3 which fails because the binary is missing.
 func TestHandleSpawnsAndFailsWithoutIperf3(t *testing.T) {
-	if _, err := exec.LookPath("iperf3"); err == nil {
-		t.Skip("iperf3 is installed; cannot exercise the spawn-failure path")
-	}
-
 	gin.SetMode(gin.TestMode)
 
 	prev := config.Config
@@ -109,6 +104,11 @@ func TestHandleSpawnsAndFailsWithoutIperf3(t *testing.T) {
 		Iperf3EndPort:   31000,
 	}
 	t.Cleanup(func() { config.Config = prev })
+
+	// Shadow PATH with an empty dir so exec.LookPath("iperf3")
+	// always fails for this test, regardless of host state.
+	emptyDir := t.TempDir()
+	t.Setenv("PATH", emptyDir)
 
 	session := &client.ClientSession{
 		Channel:   make(chan *client.Message, 4),
@@ -139,11 +139,9 @@ func TestHandleSpawnsAndFailsWithoutIperf3(t *testing.T) {
 // exercises the full handler path: random port selection, channel
 // send, cmd.Start, writer goroutines, cmd.Wait, response. The fake
 // binary writes a byte to stdout and exits, so cmd.Wait completes.
+// We prepend the fake binary dir to PATH so the test is
+// deterministic regardless of whether iperf3 is installed.
 func TestHandleEndToEndWithFakeIperf3(t *testing.T) {
-	if _, err := exec.LookPath("iperf3"); err == nil {
-		t.Skip("iperf3 is installed; cannot reliably override PATH")
-	}
-
 	gin.SetMode(gin.TestMode)
 
 	prev := config.Config
@@ -160,8 +158,10 @@ func TestHandleEndToEndWithFakeIperf3(t *testing.T) {
 	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake iperf3: %v", err)
 	}
-	origPath := os.Getenv("PATH")
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
+	// Prepend the fake-binary dir; trailing colon on the front
+	// would be a no-op, but using filepath.Join with separator is
+	// the safe path.
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	session := &client.ClientSession{
 		Channel:   make(chan *client.Message, 4),

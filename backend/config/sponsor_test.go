@@ -23,7 +23,7 @@ func TestLoadWebConfigSkippedDueToGoroutine(t *testing.T) {
 func TestLoadSponsorMessageEmpty(t *testing.T) {
 	// Empty SponsorMessage: function must return immediately without
 	// touching anything.
-	Config = &ALSConfig{SponsorMessage: ""}
+	withConfig(t, &ALSConfig{SponsorMessage: ""})
 	LoadSponsorMessage()
 	if Config.SponsorMessage != "" {
 		t.Errorf("SponsorMessage = %q; want empty", Config.SponsorMessage)
@@ -39,7 +39,7 @@ func TestLoadSponsorMessageFromLocalFile(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	Config = &ALSConfig{SponsorMessage: path}
+	withConfig(t, &ALSConfig{SponsorMessage: path})
 	LoadSponsorMessage()
 
 	if Config.SponsorMessage != content {
@@ -51,7 +51,7 @@ func TestLoadSponsorMessageFromLocalFileMissing(t *testing.T) {
 	// Path that does not exist: os.Stat errors, http.Get errors,
 	// SponsorMessage must remain unchanged.
 
-	Config = &ALSConfig{SponsorMessage: "/nonexistent/path/" + fmt.Sprint(t) + "/sponsor"}
+	withConfig(t, &ALSConfig{SponsorMessage: "/nonexistent/path/" + fmt.Sprint(t) + "/sponsor"})
 	LoadSponsorMessage()
 
 	if Config.SponsorMessage == "" {
@@ -67,7 +67,7 @@ func TestLoadSponsorMessageFromHTTPSuccess(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	Config = &ALSConfig{SponsorMessage: server.URL}
+	withConfig(t, &ALSConfig{SponsorMessage: server.URL})
 	LoadSponsorMessage()
 
 	if Config.SponsorMessage != "# Sponsor from URL" {
@@ -83,7 +83,7 @@ func TestLoadSponsorMessageFromHTTPNotOK(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	original := server.URL
-	Config = &ALSConfig{SponsorMessage: original}
+	withConfig(t, &ALSConfig{SponsorMessage: original})
 	LoadSponsorMessage()
 
 	// Non-2xx: must keep original URL (no replacement with body).
@@ -96,7 +96,7 @@ func TestLoadSponsorMessageFromHTTPUnreachable(t *testing.T) {
 	// Unroutable address: http.Get must fail, SponsorMessage keeps the
 	// original value.
 
-	Config = &ALSConfig{SponsorMessage: "http://127.0.0.1:1/sponsor"}
+	withConfig(t, &ALSConfig{SponsorMessage: "http://127.0.0.1:1/sponsor"})
 	LoadSponsorMessage()
 
 	if Config.SponsorMessage != "http://127.0.0.1:1/sponsor" {

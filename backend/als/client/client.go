@@ -110,6 +110,17 @@ func RemoveClient(id string) {
 	delete(Clients, id)
 }
 
+// RemoveAllClients empties the global Clients map. Test-only: used
+// to isolate tests that broadcast, since the package-level map is
+// otherwise shared across the test binary. Holding the write lock
+// is required to avoid racing with AddClient, RemoveClient, and
+// any code that iterates the map under clientsMu.
+func RemoveAllClients() {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+	Clients = make(map[string]*ClientSession)
+}
+
 // RemoveExpiredClients deletes sessions older than sessionExpireDuration
 // from the global map. As with RemoveClient, it does not cancel any
 // in-flight contexts -- the original callers own those.

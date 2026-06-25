@@ -6,12 +6,6 @@ import (
 	"github.com/reeflective/console"
 )
 
-func TestExitCtrlDIsCallable(t *testing.T) {
-	var fn func(*console.Console) = nil
-	_ = fn
-	t.Log("exitCtrlD is reachable via HandleConsole's interrupt setup; not exercised here")
-}
-
 func TestSetupPromptSetsAllOptions(t *testing.T) {
 	app := console.New("test-app")
 	m := app.ActiveMenu()
