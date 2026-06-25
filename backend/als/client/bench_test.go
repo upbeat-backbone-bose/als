@@ -2,8 +2,10 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -156,5 +158,64 @@ drain:
 
 	if got.String() != data {
 		t.Errorf("got %d bytes; want %d", got.Len(), len(data))
+	}
+}
+
+func BenchmarkWaitQueueCycle(b *testing.B) {
+	queueEntries = nil
+	queueShutdown = make(chan struct{})
+	queueShutdownOnce = sync.Once{}
+
+	handlerCtx, handlerCancel := context.WithCancel(context.Background())
+	defer handlerCancel()
+	handlerReady := make(chan struct{})
+	go func() {
+		close(handlerReady)
+		HandleQueue(handlerCtx)
+	}()
+	<-handlerReady
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		callerCtx, callerCancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			WaitQueue(callerCtx, func() { callerCancel() })
+		}()
+		<-done
+	}
+}
+
+// BenchmarkGracefulShutdown measures how long it takes for N parked
+// WaitQueue callers to unblock after the handler's context is cancelled.
+// Each goroutine signals a barrier after enqueuing so the benchmark can
+// synchronise before cancelling.
+// BenchmarkShutdownQueue measures the raw cost of ShutdownQueue plus
+// queueShutdown channel close. Entries are pre-created once; the
+// benchmark resets only the shutdown signal per iteration.
+func BenchmarkShutdownQueue(b *testing.B) {
+	sizes := []int{10, 100, 1000, 10000}
+	for _, n := range sizes {
+		entries := make([]*queueEntry, n)
+		for j := 0; j < n; j++ {
+			_, cancel := context.WithCancel(context.Background())
+			entries[j] = &queueEntry{
+				ctx:    context.Background(),
+				cancel: cancel,
+			}
+		}
+
+		b.Run(fmt.Sprintf("entries=%d", n), func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				queueEntries = append(queueEntries[:0], entries...)
+				queueShutdown = make(chan struct{})
+				queueShutdownOnce = sync.Once{}
+				b.StartTimer()
+				ShutdownQueue()
+			}
+		})
 	}
 }

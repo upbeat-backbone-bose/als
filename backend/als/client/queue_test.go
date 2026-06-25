@@ -10,8 +10,8 @@ import (
 )
 
 // resetQueueForTest cancels any entries still parked in the queue, clears
-// global state, and drains pending wakeup signals so each test starts
-// from a known-clean baseline.
+// global state, drains pending wakeup signals, and resets the shutdown
+// signal so each test starts from a known-clean baseline.
 func resetQueueForTest(t *testing.T) {
 	t.Helper()
 
@@ -23,6 +23,11 @@ func resetQueueForTest(t *testing.T) {
 	}
 	queueEntries = nil
 	queueLock.Unlock()
+
+	// Reset the shutdown channel so a previous test's ShutdownQueue
+	// call does not leak into this test.
+	queueShutdownOnce = sync.Once{}
+	queueShutdown = make(chan struct{})
 
 	for {
 		select {
