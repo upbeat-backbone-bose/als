@@ -9,15 +9,54 @@ import (
 	"testing"
 )
 
-func TestLoadWebConfigSkippedDueToGoroutine(t *testing.T) {
-	// LoadWebConfig spawns a goroutine that calls updatePublicIP and
-	// updateLocation when both PublicIPv4 and PublicIPv6 are empty.
-	// Both functions depend on real DNS/HTTP and would race with
-	// test cleanup. Until LoadWebConfig is refactored to expose an
-	// injection point for the IP-lookup client, the only testable
-	// surface -- the iperf3 binary presence check -- cannot be
-	// exercised in isolation.
-	t.Skip("LoadWebConfig spawns an IP-lookup goroutine that races with cleanup; needs refactor")
+// TestLoadWebConfigIPLookupSkippedWhenBothSet verifies that when
+// both PublicIPv4 and PublicIPv6 are pre-set via env, LoadWebConfig
+// does not spawn the IP-lookup goroutine (which would race with
+// test cleanup because it makes real DNS/HTTP calls). We set
+// PUBLIC_IPV4 + PUBLIC_IPV6 + LOCATION env vars, then install a
+// transport that fails any outbound request as a safety net: if a
+// future regression starts the goroutine again, the test fails
+// fast via the t.Errorf in the handler.
+//
+// The iperf3 binary path is not testable without shadowing
+// exec.LookPath -- the iperf3 feature flag flips to false only
+// when exec.LookPath returns an error, which we cannot easily
+// intercept.
+func TestLoadWebConfigIPLookupSkippedWhenBothSet(t *testing.T) {
+	prev := Config
+	Config = &ALSConfig{}
+	t.Cleanup(func() { Config = prev })
+	prevInternal := IsInternalCall
+	IsInternalCall = true
+	t.Cleanup(func() { IsInternalCall = prevInternal })
+
+	withEnv(t, map[string]string{
+		"PUBLIC_IPV4": "1.2.3.4",
+		"PUBLIC_IPV6": "::1",
+		"LOCATION":    "Earth",
+	})
+
+	// Safety net: any outbound request fails loudly. If a future
+	// regression starts the IP-lookup goroutine, the test fails
+	// fast instead of silently leaking DNS/HTTP traffic.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected outbound HTTP request to %s", r.URL.String())
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	installTestTransport(t, server.URL)
+
+	LoadWebConfig()
+
+	if Config.PublicIPv4 != "1.2.3.4" {
+		t.Errorf("PublicIPv4 = %q; want unchanged", Config.PublicIPv4)
+	}
+	if Config.PublicIPv6 != "::1" {
+		t.Errorf("PublicIPv6 = %q; want unchanged", Config.PublicIPv6)
+	}
+	if Config.Location != "Earth" {
+		t.Errorf("Location = %q; want unchanged", Config.Location)
+	}
 }
 
 func TestLoadSponsorMessageEmpty(t *testing.T) {

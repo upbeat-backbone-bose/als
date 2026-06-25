@@ -54,10 +54,12 @@ func TestHandleClientDisconnected(t *testing.T) {
 	}
 	t.Cleanup(func() { config.Config = prev })
 
-	// Channel already full. We use a request whose context is already
-	// cancelled; the handler creates a derived ctx that is also
-	// immediately done, so SafeChannelSend will hit the ctx.Done
-	// branch and return false.
+	// Pin the deterministic 500 path. When the request context is
+	// already cancelled, the session-derived ctx is also done, so
+	// SafeChannelSend returns false (ctx.Done branch), the
+	// && ctx.Err() != nil guard fires, and the handler returns
+	// 500 "client disconnected" -- no cmd.Start runs, so the 400
+	// branch is unreachable here.
 	full := make(chan *client.Message, 1)
 	full <- &client.Message{Name: "filler"}
 	parentCtx, pcancel := context.WithCancel(context.Background())
@@ -81,12 +83,8 @@ func TestHandleClientDisconnected(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Both outcomes are acceptable: SafeChannelSend returned false
-	// because the derived ctx was already done (handler returns 500),
-	// or because the channel was full and the derived ctx was not
-	// done (handler proceeds to cmd.Start which fails -> 400).
-	if w.Code != http.StatusInternalServerError && w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d; want 500 or 400; body = %s", w.Code, w.Body.String())
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d; want 500 (client disconnected); body = %s", w.Code, w.Body.String())
 	}
 }
 

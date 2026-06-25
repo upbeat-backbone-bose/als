@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -260,20 +259,12 @@ func TestHandleQueueGracefulShutdownFromOuter(t *testing.T) {
 
 	// Wait for at least one caller to be parked, so the handler is
 	// definitely inside its inner loop or between entries when we cancel.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
+	testutil.WaitFor(t, 2*time.Second, "no callers parked", func() bool {
 		queueLock.Lock()
 		n := len(queueEntries)
 		queueLock.Unlock()
-		if n >= 1 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no callers parked within 2s")
-		}
-		runtime.Gosched()
-		time.Sleep(time.Millisecond)
-	}
+		return n >= 1
+	})
 
 	// Cancel the handler. With non-blocking notifies, the handler is
 	// either in the outer select or between entries where the new

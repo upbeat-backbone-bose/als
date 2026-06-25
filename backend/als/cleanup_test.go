@@ -104,25 +104,6 @@ func TestCleanupExpiredClientsLogsAndStops(t *testing.T) {
 	ticker <- time.Now()
 }
 
-func TestCleanupExpiredClientsNoLogWhenZeroRemoved(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ticker := make(chan time.Time, 4)
-	withInjection(t, ctx, time.Hour, ticker)
-
-	// No goroutine is started here: withInjection only sets the
-	// package-level injection points, not cleanupExpiredClients()
-	// itself. This test therefore exercises "setting up the
-	// injection points with a buffered ticker and a fresh context
-	// does not panic or log spuriously when no cleanup goroutine
-	// ever runs". Drive a tick so the ticker has data buffered
-	// (it is never read), then cancel and exit.
-	ticker <- time.Now()
-	cancel()
-	_ = ctx
-}
-
 func TestCleanupExpiredClientsExitsOnContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 

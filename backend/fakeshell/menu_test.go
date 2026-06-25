@@ -30,6 +30,13 @@ func TestDefineMenuCommandsAllFeaturesOn(t *testing.T) {
 	}
 	t.Cleanup(func() { config.Config = prev })
 
+	// Isolate PATH to an empty dir so exec.LookPath fails for every
+	// binary. With features on but no binary on PATH, the factory
+	// must still produce a valid root and must NOT register any
+	// subcommands (which would be unreachable anyway). The
+	// "binary not installed" message is the only stderr we expect.
+	t.Setenv("PATH", t.TempDir())
+
 	factory := defineMenuCommands()
 	if factory == nil {
 		t.Fatal("factory is nil")
@@ -43,17 +50,27 @@ func TestDefineMenuCommandsAllFeaturesOn(t *testing.T) {
 		t.Error("DisableFlagsInUseLine should be true")
 	}
 
-	// Each binary-backed subcommand is only registered when both
-	// the feature flag is on and the binary is on PATH. We just verify
-	// the factory runs without panic and the root is correctly set up.
-	// The exact subcommands depend on which binaries are installed.
-	_ = subcommandNames(root)
+	// Subcommands that require a binary on PATH must not be
+	// registered: with PATH isolated, exec.LookPath fails for
+	// every binary-backed feature.
+	for _, n := range []string{"ping", "traceroute", "nexttrace", "speedtest", "mtr"} {
+		for _, c := range root.Commands() {
+			if c.Use == n {
+				t.Errorf("binary-backed subcommand %q should not be registered when binary is not on PATH", n)
+			}
+		}
+	}
 }
 
 func TestDefineMenuCommandsAllFeaturesOff(t *testing.T) {
 	prev := config.Config
 	config.Config = &config.ALSConfig{}
 	t.Cleanup(func() { config.Config = prev })
+
+	// Even with all features on in the config, isolating PATH
+	// means no subcommands can be registered. This test exercises
+	// the feature-off path independently of PATH state.
+	t.Setenv("PATH", t.TempDir())
 
 	factory := defineMenuCommands()
 	root := factory()

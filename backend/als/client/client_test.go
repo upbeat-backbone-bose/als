@@ -84,10 +84,12 @@ func TestRemoveExpiredClients(t *testing.T) {
 	}
 }
 
-func TestRemoveExpiredClientsInvokesCancel(t *testing.T) {
+func TestRemoveExpiredClientsDeletesExpiredSession(t *testing.T) {
 	// RemoveExpiredClients no longer forces cancellation of in-flight
 	// contexts -- the caller that called GetContext owns the cancel.
-	// The session is simply removed from the map.
+	// The session is simply removed from the map. The "InvokesCancel"
+	// suffix in the original test name is misleading; this test pins
+	// the deletion contract only.
 	clearClients()
 
 	Clients["expired"] = &ClientSession{
