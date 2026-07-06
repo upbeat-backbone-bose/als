@@ -250,7 +250,7 @@ func bytesFields(s string) []string {
 // PATHEXT lists .EXE before .CMD, so exec.LookPath would resolve
 // "speedtest" to a (non-PE) .exe that fails silently rather than
 // to our .cmd. We rely on LookPath falling through PATHEXT.
-func writeFakeSpeedtest(t *testing.T, dir string, recordArgs bool) string {
+func writeFakeSpeedtest(t *testing.T, dir string, recordArgs bool) {
 	t.Helper()
 	argsLog := filepath.Join(dir, "args.log")
 	var name, script string
@@ -278,5 +278,4 @@ func writeFakeSpeedtest(t *testing.T, dir string, recordArgs bool) string {
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake speedtest: %v", err)
 	}
-	return bin
 }
