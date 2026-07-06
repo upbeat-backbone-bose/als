@@ -58,6 +58,22 @@ func Handle(c *gin.Context) {
 			defer func() { _ = recover() }()
 			p.Start(ctx)
 		}()
+		// Emit a final PingEnd event carrying the packet statistic so
+		// the SSE consumer (Ping.vue) knows when the run has finished
+		// naturally. The HTTP 200 of /method/ping returns immediately
+		// while the pinger runs in the background, so the frontend
+		// cannot use that to decide when to stop listening.
+		//
+		// Best-effort: SafeChannelSend drops on a full channel. The
+		// frontend still recovers via Stop or session disconnect.
+		statContent, err := json.Marshal(p.GetStatistic())
+		if err != nil {
+			return
+		}
+		client.SafeChannelSend(ctx, clientSession.Channel, &client.Message{
+			Name:    "PingEnd",
+			Content: string(statContent),
+		})
 	}()
 
 	c.JSON(200, &gin.H{

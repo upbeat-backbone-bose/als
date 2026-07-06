@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -150,16 +151,21 @@ func TestHandleEndToEndWithFakeIperf3(t *testing.T) {
 	t.Cleanup(func() { config.Config = prev })
 
 	dir := t.TempDir()
-	fakeBin := filepath.Join(dir, "iperf3")
 	// Fake iperf3 that prints one byte then exits successfully.
-	script := "#!/bin/sh\necho x\nexit 0\n"
-	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake iperf3: %v", err)
-	}
-	// Prepend the fake-binary dir; trailing colon on the front
-	// would be a no-op, but using filepath.Join with separator is
-	// the safe path.
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// writeFakeIperf3 emits a platform-appropriate script so
+	// cmd.Run can actually exec it on every host: shebang on
+	// POSIX, .cmd with echo + exit /b on Windows.
+	writeFakeIperf3(t, dir)
+	// Replace PATH with the dir that holds the fake. We can't
+	// rely on prepend because if the host has a real iperf3
+	// installed (and is on PATH), LookPath would still resolve
+	// to ours -- but the real binary is harmless here, and
+	// replacement is more robust: it guarantees the fake is the
+	// only iperf3 visible, regardless of host setup. The dir
+	// also must not contain an iperf.exe (Windows PATHEXT
+	// prefers .EXE over .CMD), which writeFakeIperf3 ensures
+	// by naming the file iperf3.cmd on Windows.
+	t.Setenv("PATH", dir)
 
 	session := &client.ClientSession{
 		Channel:   make(chan *client.Message, 4),
@@ -193,6 +199,38 @@ func TestHandleEndToEndWithFakeIperf3(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Error("no Iperf3 port message on the session channel")
+	}
+}
+
+// writeFakeIperf3 drops a fake iperf3 binary into dir. The fake
+// prints one byte to stdout and exits successfully, which is
+// enough to satisfy the handler's "cmd.Wait returns" path. The
+// script form differs per host OS:
+//
+//   - POSIX: a plain "iperf3" file with #!/bin/sh shebang. The
+//     shell runs `echo x`, then `exit 0`.
+//   - Windows: an "iperf3.cmd" file invoked by cmd.exe via
+//     PATHEXT. `echo x` writes the byte; `exit /b 0` returns
+//     success. The .cmd extension is required because cmd.exe
+//     only runs files with script extensions from PATH.
+//
+// On Windows we must NOT also create an iperf3.exe in PATH --
+// PATHEXT lists .EXE before .CMD, so exec.LookPath would resolve
+// "iperf3" to a (non-PE) .exe that fails silently rather than
+// to our .cmd. We rely on LookPath falling through PATHEXT.
+func writeFakeIperf3(t *testing.T, dir string) {
+	t.Helper()
+	var name, script string
+	if runtime.GOOS == "windows" {
+		name = "iperf3.cmd"
+		script = "@echo off\r\necho x\r\nexit /b 0\r\n"
+	} else {
+		name = "iperf3"
+		script = "#!/bin/sh\necho x\nexit 0\n"
+	}
+	bin := filepath.Join(dir, name)
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake iperf3: %v", err)
 	}
 }
 

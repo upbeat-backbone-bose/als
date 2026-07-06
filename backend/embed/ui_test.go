@@ -3,6 +3,7 @@ package embed
 import (
 	"errors"
 	"io/fs"
+	"strings"
 	"testing"
 )
 
@@ -60,13 +61,27 @@ func TestUIStaticFilesHaveCoreAssets(t *testing.T) {
 // gets caught here. If the placeholder is intentionally replaced
 // with a different marker, update both this test and the comment
 // in commit 77bae70 that introduced the file.
+//
+// Line endings are normalised before comparison: the repository
+// ships the file with LF, but on Windows checkouts with
+// core.autocrlf=true Git rewrites it to CRLF before the Go
+// embed directive captures it. The marker contract is "a minimal
+// stub", not "LF exactly", so we accept any of LF, CRLF, or CR.
 func TestPlaceholderHTMLIsMarkerAsset(t *testing.T) {
 	data, err := fs.ReadFile(UIStaticFiles, "ui/placeholder.html")
 	if err != nil {
 		t.Fatalf("placeholder.html missing: %v", err)
 	}
 	const want = "<!doctype html>\n<meta charset=utf-8>\n<title>ALS</title>\n<p>UI not built — run the frontend build (npm run build in ui/) in CI.</p>\n"
-	if string(data) != want {
+	if normaliseEOL(string(data)) != want {
 		t.Errorf("placeholder.html content drifted; the marker asset must remain a minimal stub so it does not masquerade as a real UI build. got %q want %q", string(data), want)
 	}
+}
+
+// normaliseEOL collapses \r\n and bare \r to \n so byte-for-byte
+// comparison is independent of platform-specific line endings.
+func normaliseEOL(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
 }
