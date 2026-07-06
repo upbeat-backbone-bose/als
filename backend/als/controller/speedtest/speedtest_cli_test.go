@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,12 +117,13 @@ func TestHandleSpeedtestDotNetSuccess(t *testing.T) {
 	defer stop()
 
 	dir := t.TempDir()
-	fakeBin := filepath.Join(dir, "speedtest")
-	script := "#!/bin/sh\nexit 0\n"
-	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake speedtest: %v", err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// We want LookPath to find *our* fake binary and not the
+	// host's speedtest, so we replace PATH with the dir that
+	// contains the fake rather than prepending. writeFakeSpeedtest
+	// emits a platform-appropriate script (ping.cmd on Windows,
+	// a shebang script on POSIX) so c.Run can actually exec it.
+	writeFakeSpeedtest(t, dir, false)
+	t.Setenv("PATH", dir)
 
 	session := &client.ClientSession{
 		Channel:   make(chan *client.Message, 64),
@@ -162,13 +165,10 @@ func TestHandleSpeedtestDotNetWithNodeID(t *testing.T) {
 	defer stop()
 
 	dir := t.TempDir()
-	fakeBin := filepath.Join(dir, "speedtest")
+	// argsLog path is the same one writeFakeSpeedtest writes to.
+	writeFakeSpeedtest(t, dir, true)
+	t.Setenv("PATH", dir)
 	argsLog := filepath.Join(dir, "args.log")
-	script := "#!/bin/sh\necho \"$@\" > " + argsLog + "\nexit 0\n"
-	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake speedtest: %v", err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	session := &client.ClientSession{
 		Channel:   make(chan *client.Message, 64),
@@ -232,4 +232,51 @@ func bytesFields(s string) []string {
 		out = append(out, s[start:])
 	}
 	return out
+}
+
+// writeFakeSpeedtest drops a fake speedtest binary into dir that
+// records its arguments to <dir>/args.log (when recordArgs is
+// true) and exits successfully. The script must be runnable on
+// the host OS, so the form differs per platform:
+//
+//   - POSIX: a plain "speedtest" file with #!/bin/sh shebang.
+//     Shell expansion turns "$@" into the quoted argument list.
+//   - Windows: a "speedtest.cmd" file invoked by cmd.exe via
+//     PATHEXT. %* expands to the full argument list. The .cmd
+//     extension is required because cmd.exe only runs files
+//     with script extensions from PATH.
+//
+// On Windows we must NOT also create a speedtest.exe in PATH --
+// PATHEXT lists .EXE before .CMD, so exec.LookPath would resolve
+// "speedtest" to a (non-PE) .exe that fails silently rather than
+// to our .cmd. We rely on LookPath falling through PATHEXT.
+func writeFakeSpeedtest(t *testing.T, dir string, recordArgs bool) string {
+	t.Helper()
+	argsLog := filepath.Join(dir, "args.log")
+	var name, script string
+	if runtime.GOOS == "windows" {
+		name = "speedtest.cmd"
+		lines := []string{"@echo off"}
+		if recordArgs {
+			// %* is the entire argument list; > truncates so
+			// successive runs don't accumulate. Quote the
+			// path to survive spaces in t.TempDir().
+			lines = append(lines, "echo %* > \""+argsLog+"\"")
+		}
+		lines = append(lines, "exit /b 0")
+		script = strings.Join(lines, "\r\n") + "\r\n"
+	} else {
+		name = "speedtest"
+		lines := []string{"#!/bin/sh"}
+		if recordArgs {
+			lines = append(lines, "echo \"$@\" > "+argsLog)
+		}
+		lines = append(lines, "exit 0")
+		script = strings.Join(lines, "\n") + "\n"
+	}
+	bin := filepath.Join(dir, name)
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake speedtest: %v", err)
+	}
+	return bin
 }

@@ -18,10 +18,14 @@ import (
 // future regression starts the goroutine again, the test fails
 // fast via the t.Errorf in the handler.
 //
-// The iperf3 binary path is not testable without shadowing
-// exec.LookPath -- the iperf3 feature flag flips to false only
-// when exec.LookPath returns an error, which we cannot easily
-// intercept.
+// The iperf3 feature flag is gated on exec.LookPath("iperf3").
+// If the developer's PATH happens to include iperf3 (e.g. they
+// installed it for benchmarking), the flag would otherwise be set
+// to true and the "FeatureIperf3 = false" assertion below would
+// fail for the wrong reason -- masking the actual contract we
+// want to verify. We isolate PATH to an empty temp dir for the
+// duration of this test so LookPath fails regardless of host
+// environment. This makes the test environment-independent.
 func TestLoadWebConfigIPLookupSkippedWhenBothSet(t *testing.T) {
 	prev := Config
 	Config = &ALSConfig{}
@@ -29,6 +33,11 @@ func TestLoadWebConfigIPLookupSkippedWhenBothSet(t *testing.T) {
 	prevInternal := IsInternalCall
 	IsInternalCall = true
 	t.Cleanup(func() { IsInternalCall = prevInternal })
+
+	// Isolate PATH to a fresh empty dir so exec.LookPath("iperf3")
+	// returns an error on every host. The dir is empty by
+	// construction; we never write to it.
+	t.Setenv("PATH", t.TempDir())
 
 	withEnv(t, map[string]string{
 		"PUBLIC_IPV4": "1.2.3.4",

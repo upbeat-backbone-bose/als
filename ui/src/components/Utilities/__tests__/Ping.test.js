@@ -69,25 +69,35 @@ describe('Ping.vue (SSE)', () => {
     expect(wrapper.find('table').attributes('style')).toContain('display: none')
   })
 
-  it('removes the Ping listener on component unmount', async () => {
+  it('removes the Ping and PingEnd listeners on component unmount', async () => {
     const wrapper = createWrapper()
     const inflight = startInFlightPing()
     await wrapper.find('input').setValue('8.8.8.8')
     await wrapper.find('button').trigger('click')
     await flushPromises()
     const store = useAppStore()
-    // While the ping is in flight, the listener is registered
-    expect(store.source._listeners['Ping']).toBeDefined()
+    // While the ping is in flight, both the Ping and PingEnd listeners
+    // are registered.
     expect(store.source._listeners['Ping'].length).toBeGreaterThanOrEqual(1)
+    expect(store.source._listeners['PingEnd'].length).toBeGreaterThanOrEqual(1)
     // Unmount triggers onUnmounted -> stopPing -> removeEventListener
+    // for both events.
     wrapper.unmount()
-    // After cleanup, the listener array exists but is empty (removeEventListener
-    // filters the array rather than deleting the key).
+    // After cleanup, the listener arrays exist but are empty
+    // (removeEventListener filters the array rather than deleting
+    // the key).
     expect(store.source._listeners['Ping']).toEqual([])
+    expect(store.source._listeners['PingEnd']).toEqual([])
     inflight.resolve()
   })
 
-  it('removes the Ping listener after the request resolves naturally', async () => {
+  // KNOWN BUG (FIXED): the previous implementation called stopPing()
+  // and reset working=false at the end of ping(), which fired as soon
+  // as /method/ping returned 200. Since the pinger runs in the
+  // background and emits its 10 Ping frames over ~10 seconds, the
+  // listener was always removed before any frame arrived. The fix is
+  // to drive cleanup from the backend's PingEnd SSE event instead.
+  it('keeps listeners registered after the HTTP request resolves', async () => {
     const wrapper = createWrapper()
     const inflight = startInFlightPing()
     await wrapper.find('input').setValue('8.8.8.8')
@@ -95,11 +105,60 @@ describe('Ping.vue (SSE)', () => {
     await flushPromises()
     const store = useAppStore()
     expect(store.source._listeners['Ping'].length).toBeGreaterThanOrEqual(1)
-    // Resolving the request lets ping() complete; the `finally`-style cleanup
-    // (stopPing + working = false) removes the listener.
+    expect(store.source._listeners['PingEnd'].length).toBeGreaterThanOrEqual(1)
+    // Resolving the request simulates the backend's 200. The frontend
+    // must NOT clean up here -- the pinger is still running.
     inflight.resolve()
     await flushPromises()
+    expect(store.source._listeners['Ping'].length).toBeGreaterThanOrEqual(1)
+    expect(store.source._listeners['PingEnd'].length).toBeGreaterThanOrEqual(1)
+    // Cleanup happens on PingEnd, dispatched below.
+    store.source.dispatchEvent('PingEnd', JSON.stringify({ send_count: 10 }))
+    await flushPromises()
     expect(store.source._listeners['Ping']).toEqual([])
+    expect(store.source._listeners['PingEnd']).toEqual([])
+  })
+
+  it('flips working back to false and restores the Ping button on PingEnd', async () => {
+    const wrapper = createWrapper()
+    const inflight = startInFlightPing()
+    await wrapper.find('input').setValue('1.1.1.1')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    // While in flight, button text is the localized "stop" key.
+    const stopHtml = wrapper.find('button').html()
+    expect(stopHtml).toContain('stop')
+    // Backend signals natural completion.
+    const store = useAppStore()
+    store.source.dispatchEvent('PingEnd', JSON.stringify({ send_count: 10 }))
+    await flushPromises()
+    // Button is back to "Ping" (the localized tool_ping key).
+    const pingHtml = wrapper.find('button').html()
+    expect(pingHtml).toContain('tool_ping')
+    expect(pingHtml).not.toContain('> stop')
+    inflight.resolve()
+  })
+
+  it('stopPing clears working and removes both listeners (regression: button used to freeze on Stop)', async () => {
+    const wrapper = createWrapper()
+    const inflight = startInFlightPing()
+    await wrapper.find('input').setValue('1.1.1.1')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    const store = useAppStore()
+    expect(store.source._listeners['Ping'].length).toBeGreaterThanOrEqual(1)
+    expect(store.source._listeners['PingEnd'].length).toBeGreaterThanOrEqual(1)
+    // User clicks the button again -- it's now in "Stop" mode, so
+    // stopPing runs. Previously this left working=true and froze the
+    // button in the Stop state forever.
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+    expect(store.source._listeners['Ping']).toEqual([])
+    expect(store.source._listeners['PingEnd']).toEqual([])
+    const buttonHtml = wrapper.find('button').html()
+    expect(buttonHtml).toContain('tool_ping')
+    expect(buttonHtml).not.toContain('> stop')
+    inflight.resolve()
   })
 
   // KNOWN BUG (FIXED): Ping.vue's template previously called

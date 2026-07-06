@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -110,9 +111,22 @@ func TestDefineMenuCommandsPingFilter(t *testing.T) {
 	// We can detect that ping's filter rejects -f by attempting to
 	// run it through cobra. We point PATH at a fake binary that
 	// records the args it was called with.
+	//
+	// Cross-platform: the fake binary must be runnable on the host
+	// OS. POSIX uses a #!/bin/sh shebang script; Windows uses a
+	// .cmd batch file (the only script type that exec.LookPath
+	// resolves to on Windows via PATHEXT). The script just
+	// records its argv to <tDir>/args.log.
+	//
+	// On Windows, we must NOT also create a ping.exe in PATH --
+	// PATHEXT lists .EXE before .CMD, so exec.LookPath would
+	// resolve "ping" to a (non-PE) ping.exe that fails silently
+	// rather than to our ping.cmd. We rely on LookPath falling
+	// through PATHEXT to .cmd.
 	tDir := t.TempDir()
-	fakeBin := filepath.Join(tDir, "ping")
-	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh\necho \"$@\" > "+filepath.Join(tDir, "args.log")+"\n"), 0o755); err != nil {
+	fakeName, fakeScript := buildFakePingScript(tDir)
+	fakeBin := filepath.Join(tDir, fakeName)
+	if err := os.WriteFile(fakeBin, []byte(fakeScript), 0o755); err != nil {
 		t.Fatalf("write fake ping: %v", err)
 	}
 	t.Setenv("PATH", tDir)
@@ -145,6 +159,28 @@ func TestDefineMenuCommandsPingFilter(t *testing.T) {
 	if len(logBytes) != 0 {
 		t.Errorf("dangerous flag -f should have been blocked; args.log = %q", logBytes)
 	}
+}
+
+// buildFakePingScript returns (filename, contents) for a fake ping
+// binary that records its arguments to <tDir>/args.log. The
+// filename and contents differ per OS:
+//
+//   - POSIX: a plain "ping" file with #!/bin/sh shebang. Shell
+//     expansion turns "$@" into the list of CLI args.
+//   - Windows: a "ping.cmd" file invoked by cmd.exe via PATHEXT.
+//     %* expands to the full argument list. The .cmd extension
+//     is required because cmd.exe only runs files with script
+//     extensions from PATH (not bare "ping" with no extension);
+//     exec.LookPath appends the extension for us.
+//
+// Both forms are simple enough to be obviously non-production;
+// they exist only to capture the argument list for assertion.
+func buildFakePingScript(tDir string) (name, script string) {
+	argsLog := filepath.Join(tDir, "args.log")
+	if runtime.GOOS == "windows" {
+		return "ping.cmd", "@echo off\r\necho %* > \"" + argsLog + "\"\r\n"
+	}
+	return "ping", "#!/bin/sh\necho \"$@\" > " + argsLog + "\n"
 }
 
 func TestDefineMenuCommandsRootDefaults(t *testing.T) {
