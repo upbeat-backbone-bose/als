@@ -14,7 +14,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.3.1",
+    "@tailwindcss/vite": "^4.3.2",
     "pinia": "^3.0.4",
     "tailwindcss": "^4.3.1",
     "vue": "^3.5.39"
