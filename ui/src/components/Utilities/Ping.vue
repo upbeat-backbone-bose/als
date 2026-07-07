@@ -7,12 +7,13 @@ const appStore = useAppStore()
 const { t } = useI18n({ useScope: 'global' })
 const working = ref(false)
 const records = ref([])
+const seenKeys = ref(new Set())
 const host = ref('')
 let abortController = markRaw(new AbortController())
 
 const handlePingMessage = (e) => {
   const data = JSON.parse(e.data)
-  let record = {
+  const record = {
     host: '-',
     seq: data.seq,
     ttl: '-',
@@ -25,8 +26,25 @@ const handlePingMessage = (e) => {
     record.latency = data.latency / 1000000
   }
 
-  records.value.push(record)
-  return
+  const key = record.seq + '-' + record.host
+  if (seenKeys.value.has(key)) return
+  seenKeys.value.add(key)
+
+  // Insert in ascending seq order so the table reads top-to-bottom
+  // even when the backend emits replies out of order (go-ping's
+  // sendPacket blocks on a 5s deadline, so several sends can burst
+  // whose replies interleave on the way back). Within a single seq
+  // the arrival order is preserved, so the ECMP/anycast replies
+  // stay grouped.
+  const list = records.value
+  let insertAt = list.length
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].seq > record.seq) {
+      insertAt = i
+      break
+    }
+  }
+  list.splice(insertAt, 0, record)
 }
 
 const handlePingEnd = () => {
@@ -61,6 +79,7 @@ const ping = async () => {
   if (working.value) return false
   abortController = new AbortController()
   records.value = []
+  seenKeys.value = new Set()
   working.value = true
   appStore.source.addEventListener('Ping', handlePingMessage)
   appStore.source.addEventListener('PingEnd', handlePingEnd)
@@ -100,7 +119,7 @@ const ping = async () => {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="record in records">
+        <tr v-for="record in records" :key="record.seq + '-' + record.from">
           <td>{{ record.seq }}</td>
           <td>{{ record.host }}</td>
           <td>{{ record.ttl }}</td>
