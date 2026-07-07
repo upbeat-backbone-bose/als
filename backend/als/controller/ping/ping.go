@@ -1,6 +1,7 @@
 package ping
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/gin-gonic/gin"
@@ -34,7 +35,15 @@ func Handle(c *gin.Context) {
 	}
 
 	p.Count = 10
-	ctx := clientSession.GetContext(c.Request.Context())
+	// We pass context.Background() rather than c.Request.Context():
+	// gin cancels c.Request.Context() the moment this handler
+	// returns, which would happen immediately after c.JSON(200)
+	// below and cascade into the pinger's ctx, killing the run
+	// after only the first packet. The session's own parent ctx
+	// (installed by session.go via SetContext) is still tracked
+	// by GetContext, so when the client disconnects the session
+	// is removed and the pinger is cancelled as a side effect.
+	ctx := clientSession.GetContext(context.Background())
 	p.OnEvent = func(event *ping.PacketEvent, _ error) {
 		content, err := json.Marshal(event)
 		if err != nil {
