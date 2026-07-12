@@ -42,7 +42,7 @@
     "@xterm/xterm": "^6.0.0",
     "apexcharts": "^5.16.0",
     "axios": "^1.18.1",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "eslint-plugin-vue": "^10.9.2",
     "jsdom": "^29.1.1",
     "naive-ui": "^2.44.1",
