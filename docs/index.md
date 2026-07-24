@@ -48,7 +48,7 @@ ALS 是一个轻量级的 Looking-glass 服务器，用于提供网络诊断和�
 ### 技术栈
 
 **后端**:
-- Go 1.26.4
+- Go 1.26.5
 - Gin Web Framework
 - Gorilla WebSocket
 - Cobra CLI
