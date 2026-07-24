@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/miekg/dns v1.1.72
-	github.com/reeflective/console v0.4.0
+	github.com/reeflective/console v0.5.0
 	github.com/samlm0/go-ping v0.1.0
 	github.com/spf13/cobra v1.10.2
 	github.com/vishvananda/netlink v1.3.1
