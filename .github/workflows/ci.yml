@@ -112,7 +112,7 @@ jobs:
         # Pin to v2.11.4: v2.4.0 was built with go1.25 and refuses
         # to lint projects whose go.mod requires go1.26+. v2.11.4
         # is built with go1.26.1 and works against the current
-        # go.mod (go 1.26.4). v2.12.x ships but its install.sh
+        # go.mod (go 1.26.5). v2.12.x ships but its install.sh
         # currently has a stale hash entry that fails signature
         # verification; track golangci-lint releases and bump
         # when v2.12.x is repaired upstream.
