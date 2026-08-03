@@ -43,7 +43,7 @@
     "apexcharts": "^6.6.1",
     "axios": "^1.18.1",
     "eslint": "^10.8.0",
-    "eslint-plugin-vue": "^10.9.2",
+    "eslint-plugin-vue": "^10.10.0",
     "jsdom": "^30.0.1",
     "naive-ui": "^2.44.1",
     "prettier": "^3.9.5",
