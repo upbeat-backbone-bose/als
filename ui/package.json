@@ -17,7 +17,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "pinia": "^4.0.2",
     "tailwindcss": "^4.3.3",
-    "vue": "^3.5.40"
+    "vue": "^3.5.41"
   },
   "overrides": {
     "brace-expansion": "^5.0.7",
