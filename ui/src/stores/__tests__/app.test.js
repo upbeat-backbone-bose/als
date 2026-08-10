@@ -164,6 +164,36 @@ describe('useAppStore', () => {
     expect(store.source._listeners['MemoryUsage']).toBeDefined()
   })
 
+
+
+  // ---------- reconnect stability once a Config event has been seen ----------
+
+  it('does not flip connecting back to true on SSE error after first Config event', () => {
+    // Regression guard for the intermittent auto-refresh bug:
+    // once we have a Config event, transient SSE drops must not bring the
+    // loading card back, because v-if/v-else would unmount every <App/>
+    // child and look like a hard refresh to the user.
+    const store = useAppStore()
+    store.source.dispatchEvent('Config', JSON.stringify({ public_ipv4: '1.2.3.4' }))
+    expect(store.connecting).toBe(false)
+
+    store.source.triggerError()
+
+    expect(store.connecting).toBe(false)
+  })
+
+  it('does not restart the loading card on a reconnect after first Config', () => {
+    // Same regression at the re-Setup boundary: while ready, every
+    // subsequent setupEventSource() call must leave connecting alone.
+    vi.useFakeTimers()
+    const store = useAppStore()
+    store.source.dispatchEvent('Config', JSON.stringify({}))
+    expect(store.connecting).toBe(false)
+    store.source.triggerError()
+    vi.advanceTimersByTime(1000)
+    expect(store.source).toBeInstanceOf(global.EventSource)
+    expect(store.connecting).toBe(false)
+  })
   // ---------- requestMethod ----------
 
   it('requestMethod resolves on success payload', async () => {
