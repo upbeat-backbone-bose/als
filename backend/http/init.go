@@ -19,18 +19,29 @@ import (
 //     connection and trickle bytes one at a time" attack that would
 //     otherwise keep file descriptors pinned forever.
 //   - ReadTimeout: 30s. Caps the entire request body read.
-//   - WriteTimeout: 30s. Caps the response write. Note that streaming
-//     endpoints (SSE, WebSocket) handled by the upgrade path are NOT
-//     covered by WriteTimeout -- hijacked connections escape the
-//     server's response writer before the timeout would fire.
-//   - IdleTimeout: 120s. Reaps keep-alive connections that go quiet.
+//   - WriteTimeout: 10m. Bounds the overall response-write window.
+//     Note: this is misleadingly named, it is *not* an idle / per-write
+//     timeout -- it is a cap on the time from the first response byte
+//     to the handler returning. It IS shared with long-lived
+//     streaming endpoints (SSE, long file downloads).
+//     Previously this was 30s, which empirically killed idle SSE
+//     streams every 30s and surfaced to browsers as
+//     ERR_INCOMPLETE_CHUNKED_ENCODING. We extend it to 10m so an
+//     accident in the SSE keepalive cadence (every 15s by default)
+//     cannot under any circumstance kill a single session early.
+//     WebSocket still escapes this because it hijacks the connection
+//     before the response writer goes live.
+//   - IdleTimeout: 120s. Reaps keep-alive connections that go quiet
+//     between sequential requests; it does not apply inside an
+//     in-flight streaming response.
 //
-// gosec flags G112 against any zero value here; TestServerTimeoutsAreSet
-// in init_test.go is the regression guard.
+// gosec G112 flags any zero timeouts here. We deliberately keep
+// WriteTimeout > 0 so the Slowloris regression guard
+// TestServerTimeoutsAreSet in init_test.go stays green without a nolint.
 const (
 	httpReadHeaderTimeout = 10 * time.Second
 	httpReadTimeout       = 30 * time.Second
-	httpWriteTimeout      = 30 * time.Second
+	httpWriteTimeout      = 10 * time.Minute
 	httpIdleTimeout       = 120 * time.Second
 )
 

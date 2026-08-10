@@ -357,3 +357,63 @@ func parseSSEEvent(t *testing.T, body, name string) string {
 	}
 	return ""
 }
+
+// TestHandleStreamsKeepaliveCommentFrames verifies that the SSE handler
+// emits a comment frame (":keepalive\n\n") on a fixed cadence even when
+// no client-side events are pushed through the channel. Browsers /
+// EventSource ignore those lines, but the bytes still flow through
+// the chunked stream, which keeps http.Server's WriteDeadline fresh
+// and prevents proxy idle timeouts from closing the connection.
+//
+// We drive the cadence down to 20ms via keepaliveIntervalForTest so
+// the test completes in well under a second. We also assert the SSE
+// response was flushed with X-Accel-Buffering turned off so an
+// upstream nginx-style proxy will not buffer the keepalive bytes.
+func TestHandleStreamsKeepaliveCommentFrames(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stubConfigGetter(t, &config.ALSConfig{})
+
+	keepaliveIntervalForTest = 20 * time.Millisecond
+	t.Cleanup(func() { keepaliveIntervalForTest = 0 })
+
+	router := gin.New()
+	router.GET("/session", Handle)
+
+	// Run the handler with a timeout just slightly longer than the
+	// span over which we expect several keepalive frames to arrive.
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	bodyBuf := &threadSafeBuffer{}
+	w := &safeResponseRecorder{ResponseRecorder: httptest.NewRecorder(), buf: bodyBuf}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		router.ServeHTTP(w, reqWithCtx(ctx))
+	}()
+	<-done
+
+	body := bodyBuf.String()
+
+	// 250ms / 20ms = up to 12 ticks; allow plenty of slack.
+	const minExpected = 3
+	count := strings.Count(body, ":keepalive")
+	if count < minExpected {
+		t.Errorf("expected >= %d keepalive frames in body, got %d.\nbody:\n%s", minExpected, count, body)
+	}
+
+	// verify the proxy-bypass header is set so future proxies don't
+	// sit on the keepalive frames.
+	if got := w.Header().Get("X-Accel-Buffering"); got != "no" {
+		t.Errorf(`X-Accel-Buffering = %q; want "no"`, got)
+	}
+
+	// keepalive bytes must still be interleaved with the regular SSE
+	// prefix events, not in place of them.
+	for _, want := range []string{"event:SessionId", "event:Config", "event:InterfaceCache"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected %q in body; full body:\n%s", want, body)
+		}
+	}
+}
