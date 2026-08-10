@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+
 	"runtime"
 	"strings"
 	"testing"
@@ -14,6 +15,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/samlm0/als/v2/als/client"
 )
+
+// speedtestTestRequestDeadline is the request-context deadline applied to
+// every test that drives HandleSpeedtestDotNet through an in-memory
+// httptest server. The deadline MUST be long enough to absorb cmd.Start() overhead on busy CI hosts -- a previous value of 5s failed the full suite with status 500 and body exit status 1 when cmd.Start took longer than 5s under heavy CI load. 30s gives comfortable margin over the original 5s. TestSpeedtestTestRequestDeadlineIsGenerous pins this constant as a regression guard.
+const speedtestTestRequestDeadline = 30 * time.Second
+
+// TestSpeedtestTestRequestDeadlineIsGenerous is the B2 regression guard.
+// It asserts that the request-context deadline used by the in-memory
+// httptest server in TestHandleSpeedtestDotNetSuccess (and its peers)
+// is at least 10 seconds. The previous value of 5s caused intermittent
+// CI failures under load (see comment on speedtestTestRequestDeadline).
+// Lowering this constant below 10s is a deliberate decision that MUST
+// be made alongside re-validating the full suite under -race -coverprofile.
+func TestSpeedtestTestRequestDeadlineIsGenerous(t *testing.T) {
+	const minGenerous = 10 * time.Second
+	if speedtestTestRequestDeadline < minGenerous {
+		t.Errorf("speedtestTestRequestDeadline = %v; want >= %v (regression of B2 fix)", speedtestTestRequestDeadline, minGenerous)
+	}
+}
 
 // TestHandleSpeedtestDotNetMissingSession covers the 500 path when
 // no clientSession is set on the gin context.
@@ -96,7 +116,7 @@ func TestHandleSpeedtestDotNetSpawnFailsWithoutBinary(t *testing.T) {
 
 	// Bound the request with a deadline so a regression that
 	// hangs the handler is caught.
-	reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	reqCtx, reqCancel := context.WithTimeout(context.Background(), speedtestTestRequestDeadline)
 	defer reqCancel()
 	req = req.WithContext(reqCtx)
 
@@ -143,7 +163,7 @@ func TestHandleSpeedtestDotNetSuccess(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/probe", http.NoBody)
 	w := httptest.NewRecorder()
 
-	reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	reqCtx, reqCancel := context.WithTimeout(context.Background(), speedtestTestRequestDeadline)
 	defer reqCancel()
 	req = req.WithContext(reqCtx)
 
@@ -188,7 +208,7 @@ func TestHandleSpeedtestDotNetWithNodeID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/probe?node_id=1234", http.NoBody)
 	w := httptest.NewRecorder()
 
-	reqCtx, reqCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	reqCtx, reqCancel := context.WithTimeout(context.Background(), speedtestTestRequestDeadline)
 	defer reqCancel()
 	req = req.WithContext(reqCtx)
 

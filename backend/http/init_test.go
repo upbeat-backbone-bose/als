@@ -180,3 +180,57 @@ func TestStartRejectsDoubleStart(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestServerTimeoutsAreSet pins the contract that the http.Server built
+// by (*Server).Start has non-zero timeouts on every field that protects
+// against Slowloris-style attacks (read header hang, slow read, slow
+// write, idle keep-alive). gosec G112 reports this as a vulnerability
+// when any of these are zero. This test makes the requirement explicit
+// and serves as the regression guard for B1 in audit/SPEC.md.
+func TestServerTimeoutsAreSet(t *testing.T) {
+	s := CreateServer()
+	s.SetListen("127.0.0.1:0")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := s.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Start(): %v", err)
+		}
+	}()
+
+	testutil.WaitFor(t, 5*time.Second, "httpServer set", func() bool {
+		s.mu.Lock()
+		ready := s.httpServer != nil
+		s.mu.Unlock()
+		return ready
+	})
+
+	s.mu.Lock()
+	srv := s.httpServer
+	s.mu.Unlock()
+	if srv == nil {
+		t.Fatal("httpServer not set after Start")
+	}
+
+	if srv.ReadHeaderTimeout <= 0 {
+		t.Errorf("ReadHeaderTimeout = %v; want > 0 (Slowloris defense)", srv.ReadHeaderTimeout)
+	}
+	if srv.ReadTimeout <= 0 {
+		t.Errorf("ReadTimeout = %v; want > 0", srv.ReadTimeout)
+	}
+	if srv.WriteTimeout <= 0 {
+		t.Errorf("WriteTimeout = %v; want > 0", srv.WriteTimeout)
+	}
+	if srv.IdleTimeout <= 0 {
+		t.Errorf("IdleTimeout = %v; want > 0", srv.IdleTimeout)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	wg.Wait()
+}

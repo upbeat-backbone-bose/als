@@ -370,3 +370,81 @@ func TestSessionFromContextRejectsRelatedTypes(t *testing.T) {
 		}
 	}
 }
+
+// TestGetContextTerminatesOnParentCancel is the B3 regression guard.
+// The session stores a parent context via SetContext; GetContext
+// derives a new ctx and starts a goroutine that watches BOTH the
+// parent and the new ctx. When the parent is cancelled (which is
+// the dominant path -- session lifecycle), the derived ctx must
+// also be cancelled. The previous design (a single per-session
+// cancelFunc field) leaked goroutines when the parent was the
+// trigger; this test pins the new contract.
+func TestGetContextTerminatesOnParentCancel(t *testing.T) {
+	resetClientMap()
+
+	session := &ClientSession{
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now(),
+	}
+
+	parent, parentCancel := context.WithCancel(context.Background())
+	session.SetContext(parent)
+
+	// requestCtx is independent of parent -- it stays alive
+	// throughout the test, so the only path to ctx.Done() is via
+	// the parent watch.
+	derived := session.GetContext(context.Background())
+
+	select {
+	case <-derived.Done():
+		t.Fatal("derived ctx already cancelled before parent cancel")
+	default:
+	}
+
+	parentCancel()
+
+	select {
+	case <-derived.Done():
+		// Good: the watcher goroutine observed parent.Done()
+		// and called cancel() on the derived ctx.
+	case <-time.After(time.Second):
+		t.Fatal("derived ctx not cancelled within 1s of parent cancel")
+	}
+}
+
+// TestGetContextTerminatesOnRequestCancel covers the other half of
+// B3: when the *caller's* request context is cancelled, the derived
+// ctx must also be cancelled. Together with
+// TestGetContextTerminatesOnParentCancel this proves the watcher
+// goroutine terminates on either trigger.
+func TestGetContextTerminatesOnRequestCancel(t *testing.T) {
+	resetClientMap()
+
+	session := &ClientSession{
+		Channel:   make(chan *Message, 1),
+		CreatedAt: time.Now(),
+	}
+
+	// parent stays alive throughout -- we are testing the
+	// request-context branch only.
+	session.SetContext(context.Background())
+
+	requestCtx, requestCancel := context.WithCancel(context.Background())
+	derived := session.GetContext(requestCtx)
+
+	select {
+	case <-derived.Done():
+		t.Fatal("derived ctx already cancelled before request cancel")
+	default:
+	}
+
+	requestCancel()
+
+	select {
+	case <-derived.Done():
+		// Good: the watcher goroutine observed the request
+		// ctx's Done() and called cancel() on the derived ctx.
+	case <-time.After(time.Second):
+		t.Fatal("derived ctx not cancelled within 1s of request cancel")
+	}
+}
