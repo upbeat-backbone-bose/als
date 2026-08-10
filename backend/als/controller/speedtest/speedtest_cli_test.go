@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-
 	"runtime"
 	"strings"
 	"testing"
@@ -16,10 +15,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/samlm0/als/v2/als/client"
 )
+
 // speedtestTestRequestDeadline is the request-context deadline applied to
 // every test that drives HandleSpeedtestDotNet through an in-memory
 // httptest server. The deadline MUST be long enough to absorb cmd.Start() overhead on busy CI hosts -- a previous value of 5s failed the full suite with status 500 and body exit status 1 when cmd.Start took longer than 5s under heavy CI load. 30s gives comfortable margin over the original 5s. TestSpeedtestTestRequestDeadlineIsGenerous pins this constant as a regression guard.
 const speedtestTestRequestDeadline = 30 * time.Second
+
 // TestSpeedtestTestRequestDeadlineIsGenerous is the B2 regression guard.
 // It asserts that the request-context deadline used by the in-memory
 // httptest server in TestHandleSpeedtestDotNetSuccess (and its peers)
@@ -298,5 +299,3 @@ func writeFakeSpeedtest(t *testing.T, dir string, recordArgs bool) {
 		t.Fatalf("write fake speedtest: %v", err)
 	}
 }
-
-
