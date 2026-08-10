@@ -25,8 +25,8 @@ type Message struct {
 }
 
 type ClientSession struct {
-	Channel   chan *Message
-	ctx       context.Context
+	Channel chan *Message
+	ctx     context.Context
 	// done is closed by Close to signal the session's consumers
 	// (the SSE handler, the timer broadcast loop) that the
 	// session has been taken over or torn down. It is a distinct
