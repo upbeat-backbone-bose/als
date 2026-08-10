@@ -27,11 +27,51 @@ type Message struct {
 type ClientSession struct {
 	Channel   chan *Message
 	ctx       context.Context
+	// done is closed by Close to signal the session's consumers
+	// (the SSE handler, the timer broadcast loop) that the
+	// session has been taken over or torn down. It is a distinct
+	// mechanism from ctx so the resume path can stop the old SSE
+	// handler without touching the ctx chain that other request
+	// handlers depend on. Lazily initialised by ensureDone so the
+	// existing "struct literal + AddClient" call sites keep
+	// working without changes.
+	done      chan struct{}
+	initOnce  sync.Once
+	closeOnce sync.Once
 	CreatedAt time.Time
 }
 
 func (c *ClientSession) SetContext(ctx context.Context) {
 	c.ctx = ctx
+}
+
+// ensureDone lazily creates the done channel. Idempotent and safe
+// under concurrent first-callers thanks to initOnce.
+func (c *ClientSession) ensureDone() {
+	c.initOnce.Do(func() {
+		c.done = make(chan struct{})
+	})
+}
+
+// Done returns a channel that is closed by Close. Consumers (the
+// SSE handler in particular) select on it to break out of their
+// read loop when the session has been taken over by a resume or
+// otherwise torn down. The returned channel is never closed twice
+// and is always non-nil after the first call.
+func (c *ClientSession) Done() <-chan struct{} {
+	c.ensureDone()
+	return c.done
+}
+
+// Close signals that the session should be torn down. Subsequent
+// calls are no-ops. This is the resume path's lever: the new
+// /session handler calls Close on the old ClientSession, the old
+// SSE handler observes it via Done(), and exits its select loop.
+// The old handler's defer still runs but uses IsCurrent to avoid
+// removing the freshly-installed replacement entry from the map.
+func (c *ClientSession) Close() {
+	c.ensureDone()
+	c.closeOnce.Do(func() { close(c.done) })
 }
 
 // GetContext returns a derived context that is cancelled when either
@@ -82,6 +122,18 @@ func AddClient(id string, session *ClientSession) {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
 	Clients[id] = session
+}
+
+// IsCurrent reports whether the entry stored under id is the same
+// pointer as s. The resume path uses this to let a stale SSE
+// handler's defer skip RemoveClient: after the resume replaces the
+// map entry, the old handler's clientSession pointer is no longer
+// the one the map points at, so IsCurrent returns false and the
+// old handler leaves the new entry in place.
+func IsCurrent(id string, s *ClientSession) bool {
+	clientsMu.RLock()
+	defer clientsMu.RUnlock()
+	return Clients[id] == s
 }
 
 func GetClient(id string) (*ClientSession, bool) {

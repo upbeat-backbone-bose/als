@@ -77,18 +77,49 @@ func resolveKeepaliveInterval() time.Duration {
 }
 
 func Handle(c *gin.Context) {
-	sessionID := uuid.New().String()
-	channel := make(chan *client.Message, 64)
-	clientSession := &client.ClientSession{
-		Channel:   channel,
-		CreatedAt: time.Now(),
+	// Resume path: if the client sends ?resume=<sessionId> for a
+	// session that is still live, reuse it instead of minting a new
+	// UUID. This is what keeps long-running operations (Librespeed
+	// upload, IPerf3, shell websockets) alive across the ~30s SSE
+	// reconnects that browsers and intermediate proxies impose on
+	// idle EventSource streams. The old SSE handler is asked to
+	// exit via Close(); its defer uses IsCurrent to avoid removing
+	// the replacement entry that this handler is about to install.
+	resumeID := c.Query("resume")
+	var sessionID string
+	var clientSession *client.ClientSession
+	if resumeID != "" {
+		if old, ok := client.GetClient(resumeID); ok {
+			old.Close()
+			client.RemoveClient(resumeID)
+			clientSession = &client.ClientSession{
+				Channel:   make(chan *client.Message, 64),
+				CreatedAt: time.Now(),
+			}
+			client.AddClient(resumeID, clientSession)
+			sessionID = resumeID
+		}
 	}
-	client.AddClient(sessionID, clientSession)
+	if clientSession == nil {
+		sessionID = uuid.New().String()
+		clientSession = &client.ClientSession{
+			Channel:   make(chan *client.Message, 64),
+			CreatedAt: time.Now(),
+		}
+		client.AddClient(sessionID, clientSession)
+	}
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	clientSession.SetContext(ctx)
 	defer func() {
 		cancel()
-		client.RemoveClient(sessionID)
+		// Only remove the map entry if we are still the live handler
+		// for this id. The resume path installs a replacement above
+		// before the old handler's defer fires; without this guard
+		// the stale handler would yank the new entry out from under
+		// its replacement.
+		if client.IsCurrent(sessionID, clientSession) {
+			client.RemoveClient(sessionID)
+		}
 	}()
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
@@ -126,6 +157,12 @@ func Handle(c *gin.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-clientSession.Done():
+			// Another handler took over this session (the resume
+			// path on /session) or the session was closed by a
+			// higher-level teardown. Drop out so we don't keep
+			// emitting on a writer that the new handler now owns.
+			return
 		case <-keepalive.C:
 			// SSE comment frame ("\n:keepalive\n\n"). Browsers and
 			// EventSource clients ignore lines that start with ":" so
@@ -142,7 +179,7 @@ func Handle(c *gin.Context) {
 				return
 			}
 			c.Writer.Flush()
-		case msg, ok := <-channel:
+		case msg, ok := <-clientSession.Channel:
 			if !ok {
 				return
 			}
