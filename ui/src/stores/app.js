@@ -45,7 +45,15 @@ export const useAppStore = defineStore('app', () => {
     if (!ready.value) {
       connecting.value = true
     }
-    const eventSource = new EventSource('./session')
+    // On a reconnect, ask the backend to reuse our existing session
+    // id so long-running consumers (Librespeed worker, IPerf3,
+    // shell websocket, etc.) keep talking to the same session map
+    // entry. Without `resume` the backend would mint a fresh UUID on
+    // every reconnect (~30s) and any in-flight request against the
+    // old id would start returning 400 "Invalid session".
+    const eventSource = new EventSource(
+      sessionId.value ? `./session?resume=${sessionId.value}` : './session'
+    )
 
     eventSource.addEventListener('SessionId', (e) => {
       sessionId.value = e.data

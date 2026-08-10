@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:embed": "vite build && node -e \"const fs=require('node:fs');fs.cpSync('dist','../backend/embed/ui',{recursive:true,force:true});console.log('synced dist -> backend/embed/ui');\"",
     "preview": "vite preview",
     "lint": "eslint src vite.config.js vitest.config.js vite.shared.js eslint.config.js",
     "lint:fix": "npm run lint -- --fix",

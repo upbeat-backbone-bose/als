@@ -87,16 +87,31 @@ for (var chartId in charts.value) {
 
 const startOrStopSpeedtest = (force = false) => {
   if (workerInstance != null) {
+    // Stop path: tear down the worker and the 200ms status ticker
+    // before clearing our handles. `terminate()` is a hard kill
+    // (postMessage('abort') only nudges the worker's own flag);
+    // using both means we don't keep paying the per-tick closure
+    // cost and a stale onmessage can no longer fire against a
+    // component that has unmounted.
     workerInstance.postMessage('abort')
-    clearInterval(workerTimer)
-
+    workerInstance.terminate()
     workerInstance = null
+    if (workerTimer != null) {
+      clearInterval(workerTimer)
+      workerTimer = null
+    }
     if (force) {
       uploadText.value = '...'
       downloadText.value = '...'
     }
     working.value = false
     return
+  }
+  // Start path. Defensively clear any orphaned interval handle so
+  // a double-click on the begin button can never leak a tick.
+  if (workerTimer != null) {
+    clearInterval(workerTimer)
+    workerTimer = null
   }
   working.value = true
   workerInstance = new Worker('./speedtest_worker.js')
@@ -124,12 +139,17 @@ const startOrStopSpeedtest = (force = false) => {
       uploadText.value = data.ulStatus
       charts.value.upload.data.push(data.ulStatus)
       charts.value.upload.categories.push(nowPointName)
-      chartUploadRef.value.updateOptions({
+      // Optional chain guards against a late onmessage arriving
+      // after the component (and its chart refs) have been torn
+      // down -- e.g. when the SSE reconnection path used to swap
+      // the session id out from under the worker, and the chart
+      // briefly unmounted.
+      chartUploadRef.value?.updateOptions({
         xaxis: {
           categories: toRaw(charts.value.upload.categories)
         }
       })
-      chartUploadRef.value.updateSeries([
+      chartUploadRef.value?.updateSeries([
         {
           name: t('upload'),
           data: toRaw(charts.value.upload.data)
@@ -142,12 +162,12 @@ const startOrStopSpeedtest = (force = false) => {
       downloadText.value = data.dlStatus
       charts.value.download.data.push(data.dlStatus)
       charts.value.download.categories.push(nowPointName)
-      chartDownloadRef.value.updateOptions({
+      chartDownloadRef.value?.updateOptions({
         xaxis: {
           categories: toRaw(charts.value.download.categories)
         }
       })
-      chartDownloadRef.value.updateSeries([
+      chartDownloadRef.value?.updateSeries([
         {
           name: t('download'),
           data: toRaw(charts.value.download.data)

@@ -417,3 +417,183 @@ func TestHandleStreamsKeepaliveCommentFrames(t *testing.T) {
 		}
 	}
 }
+
+// TestHandleResumeReusesSession verifies the resume path: a /session
+// request carrying ?resume=<id> for a still-live session must reuse
+// that id (not mint a new UUID) and install a fresh ClientSession
+// entry in the global map. The old SSE handler must exit via the
+// ClientSession.Done() signal triggered by the resume's Close();
+// the IsCurrent guard in the first handler's defer must then skip
+// RemoveClient so the replacement entry the second handler installs
+// is not yanked out from under it.
+func TestHandleResumeReusesSession(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stubConfigGetter(t, &config.ALSConfig{})
+
+	// Short keepalive so the handlers actually unblock in test
+	// time without us sleeping for the full 15s production value.
+	keepaliveIntervalForTest = 20 * time.Millisecond
+	t.Cleanup(func() { keepaliveIntervalForTest = 0 })
+
+	router := gin.New()
+	router.GET("/session", Handle)
+
+	// --- 1st connection: open, capture the SessionId.
+	firstBody := &threadSafeBuffer{}
+	firstWriter := &safeResponseRecorder{ResponseRecorder: httptest.NewRecorder(), buf: firstBody}
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	defer firstCancel()
+
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		router.ServeHTTP(firstWriter, reqWithCtx(firstCtx))
+	}()
+
+	// Wait for the first handler to publish its SessionId.
+	var firstSessionID string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if id := parseSSEEvent(t, firstBody.String(), "SessionId"); id != "" {
+			firstSessionID = id
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if firstSessionID == "" {
+		firstCancel()
+		<-firstDone
+		t.Fatalf("first /session never emitted SessionId; body=%q", firstBody.String())
+	}
+
+	// --- 2nd connection: ?resume=<originalID>.
+	secondBody := &threadSafeBuffer{}
+	secondWriter := &safeResponseRecorder{ResponseRecorder: httptest.NewRecorder(), buf: secondBody}
+	secondCtx, secondCancel := context.WithCancel(context.Background())
+	defer secondCancel()
+
+	secondDone := make(chan struct{})
+	go func() {
+		defer close(secondDone)
+		req := httptest.NewRequest(http.MethodGet, "/session?resume="+firstSessionID, http.NoBody).WithContext(secondCtx)
+		router.ServeHTTP(secondWriter, req)
+	}()
+
+	// The first handler must observe ClientSession.Done() closing
+	// and return promptly.
+	select {
+	case <-firstDone:
+	case <-time.After(2 * time.Second):
+		firstCancel()
+		<-firstDone
+		t.Fatal("first /session handler did not exit after resume; takeover via Done() failed")
+	}
+
+	// Wait for the second handler to publish its SessionId.
+	var secondSessionID string
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if id := parseSSEEvent(t, secondBody.String(), "SessionId"); id != "" {
+			secondSessionID = id
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if secondSessionID == "" {
+		secondCancel()
+		<-secondDone
+		t.Fatalf("second /session?resume=... never emitted SessionId; body=%q", secondBody.String())
+	}
+
+	if secondSessionID != firstSessionID {
+		t.Errorf("resume minted a new session id: first=%q second=%q; want equal", firstSessionID, secondSessionID)
+	}
+
+	// The replacement entry must still be in the map. If the
+	// first handler's defer had removed it (IsCurrent guard
+	// broken), this lookup would miss and subsequent requests
+	// using this session id would all 400.
+	client.ClientsMu().RLock()
+	entry, ok := client.Clients[firstSessionID]
+	client.ClientsMu().RUnlock()
+	if !ok {
+		secondCancel()
+		<-secondDone
+		t.Fatalf("Clients[%q] missing after resume: the replacement entry was not preserved (IsCurrent guard likely broken)", firstSessionID)
+	}
+	if !client.IsCurrent(firstSessionID, entry) {
+		secondCancel()
+		<-secondDone
+		t.Errorf("IsCurrent returned false for the live entry; IsCurrent guard is broken")
+	}
+
+	// Cancel the second request; the second handler exits and its
+	// defer (IsCurrent guard passes, it IS current) removes the
+	// entry. After both handlers are done the map must be empty
+	// for this id.
+	secondCancel()
+	select {
+	case <-secondDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second /session handler did not exit on context cancel")
+	}
+
+	client.ClientsMu().RLock()
+	_, stillThere := client.Clients[firstSessionID]
+	client.ClientsMu().RUnlock()
+	if stillThere {
+		t.Errorf("Clients[%q] still present after both handlers exited", firstSessionID)
+	}
+}
+
+// TestHandleResumeUnknownIdCreatesNew covers the fallback: a
+// ?resume=<id> for an id that no longer exists must mint a fresh
+// UUID and install a new entry. The client cannot accidentally
+// inherit a stale session.
+func TestHandleResumeUnknownIdCreatesNew(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stubConfigGetter(t, &config.ALSConfig{})
+
+	keepaliveIntervalForTest = 20 * time.Millisecond
+	t.Cleanup(func() { keepaliveIntervalForTest = 0 })
+
+	router := gin.New()
+	router.GET("/session", Handle)
+
+	body := &threadSafeBuffer{}
+	writer := &safeResponseRecorder{ResponseRecorder: httptest.NewRecorder(), buf: body}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		req := httptest.NewRequest(http.MethodGet, "/session?resume=definitely-not-a-live-id", http.NoBody).WithContext(ctx)
+		router.ServeHTTP(writer, req)
+	}()
+
+	// Wait for the handler to publish its SessionId and then
+	// cancel so it exits cleanly.
+	var newID string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if id := parseSSEEvent(t, body.String(), "SessionId"); id != "" {
+			newID = id
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	if newID == "" {
+		t.Fatalf("/session?resume=unknown never emitted SessionId; body=%q", body.String())
+	}
+	if newID == "definitely-not-a-live-id" {
+		t.Errorf("expected a fresh UUID, got the unknown resume id back: %q", newID)
+	}
+
+	// Cleanup so the test's leftover entry doesn't leak into
+	// other tests in the package.
+	client.RemoveClient(newID)
+}
