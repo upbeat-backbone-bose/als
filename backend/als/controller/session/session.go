@@ -58,6 +58,24 @@ func buildClientConfig(cfg *config.ALSConfig, clientIP string) ClientConfig {
 // configGetter is overridable in tests; production reads config.Config directly.
 var configGetter = func() *config.ALSConfig { return config.Config }
 
+// keepaliveInterval is the cadence at which Handle emits an SSE comment
+// frame ("\n:keepalive\n\n") so that proxy / TCP idle timeouts do not
+// close an otherwise-idle stream mid-chunk. The production value is
+// 15s; tests override keepaliveIntervalForTest to drive the cadence
+// down to a few milliseconds so they can observe keepalive frames.
+const keepaliveInterval = 15 * time.Second
+
+// keepaliveIntervalForTest, when non-zero, replaces keepaliveInterval
+// for the duration of a test. Production code never sets it.
+var keepaliveIntervalForTest time.Duration
+
+func resolveKeepaliveInterval() time.Duration {
+	if keepaliveIntervalForTest > 0 {
+		return keepaliveIntervalForTest
+	}
+	return keepaliveInterval
+}
+
 func Handle(c *gin.Context) {
 	sessionID := uuid.New().String()
 	channel := make(chan *client.Message, 64)
@@ -76,6 +94,10 @@ func Handle(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
+	// Tell nginx (and similar proxies) to forward our response
+	// immediately instead of buffering it -- otherwise keepalive
+	// frames can sit in the proxy buffer and never reach the client.
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.SSEvent("SessionId", sessionID)
 
 	clientCfg := buildClientConfig(configGetter(), c.ClientIP())
@@ -97,10 +119,29 @@ func Handle(c *gin.Context) {
 	c.SSEvent("InterfaceCache", string(interfaceCacheJson))
 	c.Writer.Flush()
 
+	keepalive := time.NewTicker(resolveKeepaliveInterval())
+	defer keepalive.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-keepalive.C:
+			// SSE comment frame ("\n:keepalive\n\n"). Browsers and
+			// EventSource clients ignore lines that start with ":" so
+			// this is a no-op from their POV, but the bytes still
+			// flow through the chunked stream -- which is enough to
+			// keep http.Server's WriteDeadline fresh and to keep any
+			// upstream proxy from idle-timing out the connection.
+			if _, err := c.Writer.WriteString(":keepalive\n\n"); err != nil {
+				// Client socket is gone (or the writer has been
+				// closed for some other reason). Stop the goroutine
+				// so we no longer pin a session entry in the global
+				// map.
+				log.Default().Printf("session: keepalive write failed, closing: %v", err)
+				return
+			}
+			c.Writer.Flush()
 		case msg, ok := <-channel:
 			if !ok {
 				return
