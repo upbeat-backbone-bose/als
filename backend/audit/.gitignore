@@ -1,0 +1,8 @@
+# Audit artifacts: logs, coverage profiles, build output, Go caches.
+# Only the SPEC.md, EVIDENCE.md, and this .gitignore are checked in.
+*.log
+*.out
+*.exe
+gocache/
+gomodcache/
+gotmpdir/
