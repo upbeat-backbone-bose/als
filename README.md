@@ -75,7 +75,3 @@ docker run -d \
 ## License
 
 Code is licensed under MIT Public License.
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=upbeat-backbone-bose/als&type=Date)](https://star-history.com/#upbeat-backbone-bose/als&Date)
