@@ -47,7 +47,7 @@
     "eslint": "^10.8.1",
     "eslint-plugin-vue": "^10.10.0",
     "jsdom": "^30.0.1",
-    "naive-ui": "^2.45.1",
+    "naive-ui": "^2.45.2",
     "prettier": "^3.9.6",
     "unplugin-auto-import": "^21.1.0",
     "unplugin-vue-components": "^32.1.0",
