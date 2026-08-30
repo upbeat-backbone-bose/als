@@ -55,7 +55,7 @@
     "vite": "^8.2.2",
     "vitest": "^4.1.11",
     "vue-eslint-parser": "^10.4.1",
-    "vue-i18n": "^11.4.8",
+    "vue-i18n": "^11.4.10",
     "vue3-apexcharts": "^1.11.1",
     "vue3-markdown-it": "^1.0.10"
   }
