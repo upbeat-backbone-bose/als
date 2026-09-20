@@ -48,7 +48,7 @@
     "eslint-plugin-vue": "^10.11.0",
     "jsdom": "^30.0.1",
     "naive-ui": "^2.45.3",
-    "prettier": "^3.9.6",
+    "prettier": "^3.9.7",
     "unplugin-auto-import": "^21.1.0",
     "unplugin-vue-components": "^32.1.0",
     "v-clipboard": "3.0.0-next.1",
