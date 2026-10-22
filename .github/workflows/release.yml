@@ -62,12 +62,18 @@ jobs:
         working-directory: ./backend
       - name: Install UPX
         if: matrix.goos == 'linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          UPX_VERSION=$(curl -sL https://api.github.com/repos/upx/upx/releases/latest | grep '"tag_name"' | sed 's/.*v\([0-9.]*\).*/\1/')
-          wget -q https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz -O /tmp/upx.tar.xz
+          UPX_VERSION=$(gh release view --repo upx/upx --json tagName --jq '.tagName' | sed 's/^v//')
+          test -n "$UPX_VERSION"
+          wget -q "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz" -O /tmp/upx.tar.xz
           tar -xf /tmp/upx.tar.xz -C /tmp
           sudo cp /tmp/upx-*/upx /usr/local/bin/
           upx --version
+        # shell: bash is required here: the default shell is `bash -e` without
+        # pipefail, so a failing `gh` would be masked by `sed` and surface as a
+        # bogus wget 404 instead of the real error.
         shell: bash
       - name: Build binary
         working-directory: ./backend
