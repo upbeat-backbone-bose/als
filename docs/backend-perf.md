@@ -14,6 +14,9 @@ per buffer configuration to control for sampling noise.
 > `backend/als/client/` 自 `4b60f51`（2026-06-25）与 `f5753b4`（2026-08-10）之后**未重测**，
 > 且 `bench_test.go` 新增了 `BenchmarkWaitQueueCycle`、`BenchmarkShutdownQueue` 两个基准
 > （本文档**未记录**其数值）。
+> 工具链：基线数据产出于 **Go 1.26.4**（`87a8c40` 当时的 go.mod），当前 go.mod 已升级至
+> **Go 1.26.10**，中间跨 6 个 patch 版本 —— 文末「Expected noise」中 "allocs/op 在同一
+> Go 版本下应当精确" 的前提**已不成立**，allocs/op 同样可能漂移。
 > 引用本文任何数值时都必须注明基线提交；需要当前 HEAD 的数值请按文末
 > 「How to reproduce these numbers」重跑。
 
