@@ -81,17 +81,24 @@ jobs:
           ext=""
           if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
           env GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -ldflags="-s -w" -o als-${{ matrix.goos }}-${{ matrix.goarch }}${ext}
-      - name: Generate checksum
-        working-directory: ./backend
-        run: |
-          ext=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
-          sha256sum als-${{ matrix.goos }}-${{ matrix.goarch }}${ext} > als-${{ matrix.goos }}-${{ matrix.goarch }}${ext}.sha256
       - name: Compress with UPX
         if: matrix.goos == 'linux'
         run: |
           which upx && upx -9 backend/als-linux-${{ matrix.goarch }} || echo "UPX compression skipped"
         shell: bash
+      - name: Generate checksum
+        # Must run AFTER "Compress with UPX": UPX rewrites the binary in
+        # place, so a checksum taken before compression would never match
+        # the asset users actually download. This step used to be ordered
+        # before the UPX step, which left the linux .sha256 files wrong
+        # for every release (verified on v2.8.0 and v2.8.1: linux-amd64
+        # and linux-arm64 failed `sha256sum -c`, while darwin/windows
+        # passed because they are never compressed).
+        working-directory: ./backend
+        run: |
+          ext=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
+          sha256sum als-${{ matrix.goos }}-${{ matrix.goarch }}${ext} > als-${{ matrix.goos }}-${{ matrix.goarch }}${ext}.sha256
       - name: Upload release assets
         uses: softprops/action-gh-release@v3
         with:
