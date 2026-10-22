@@ -6,7 +6,7 @@
 
 ## 1. 模块概述
 
-ALS 的后端是使用 Go 1.26.9 构建的 HTTP 服务器，提供网络诊断和测速功能。采用 Gin Web 框架，支持 WebSocket 和 SSE 通信。
+ALS 的后端是使用 Go 1.26.10 构建的 HTTP 服务器，提供网络诊断和测速功能。采用 Gin Web 框架，支持 WebSocket 和 SSE 通信。
 
 **核心职责**:
 - HTTP 路由和中间件
@@ -797,7 +797,7 @@ func handleStatisFile(filePath string, c *gin.Context) {
 ```go
 module github.com/samlm0/als/v2
 
-go 1.26.9
+go 1.26.10
 
 require (
     github.com/creack/pty v1.1.24           // PTY 支持
