@@ -2,11 +2,11 @@
 
 **模块路径**: `backend/`
 
-**最后更新**: 2026-04-27
+**最后更新**: 2026-10-22
 
 ## 1. 模块概述
 
-ALS 的后端是使用 Go 1.26.5 构建的 HTTP 服务器，提供网络诊断和测速功能。采用 Gin Web 框架，支持 WebSocket 和 SSE 通信。
+ALS 的后端是使用 Go 1.26.9 构建的 HTTP 服务器，提供网络诊断和测速功能。采用 Gin Web 框架，支持 WebSocket 和 SSE 通信。
 
 **核心职责**:
 - HTTP 路由和中间件
@@ -91,27 +91,65 @@ func Init() {
     // 配置路由
     SetupHttpRoute(aHttp.GetEngine())
 
+    // 统一的可取消上下文：所有后台任务在 ctx 被取消时退出
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
     // 启动后台任务
     if config.Config.FeatureIfaceTraffic {
-        go timer.SetupInterfaceBroadcast()
+        go timer.SetupInterfaceBroadcastContext(ctx)
     }
-    go timer.UpdateSystemResource()
-    go client.HandleQueue()
+    go timer.UpdateSystemResourceContext(ctx)
+    go client.HandleQueue(ctx)
     go cleanupExpiredClients()
 
-    // 启动 HTTP 服务器
-    aHttp.Start()
+    // 优雅停机：收到 SIGINT / SIGTERM 后取消上下文、释放队列、关闭 HTTP 服务
+    go func() {
+        quit := make(chan os.Signal, 1)
+        signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+        <-quit
+        log.Default().Println("Shutting down server...")
+        cancel()
+        // 立即唤醒阻塞在 WaitQueue 的调用方，即使其父 context 仍然存活
+        client.ShutdownQueue()
+        shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+        defer shutdownCancel()
+        if err := aHttp.Shutdown(shutdownCtx); err != nil {
+            log.Default().Printf("Server forced to shutdown: %v", err)
+        }
+    }()
+
+    if err := aHttp.Start(); err != nil {
+        log.Default().Printf("Server failed to start: %v", err)
+    }
 }
 
 func cleanupExpiredClients() {
-    ticker := time.NewTicker(1 * time.Hour)
+    ctx := cleanupContext
+    if ctx == nil {
+        ctx = context.Background()
+    }
+    interval := cleanupInterval
+    if interval == 0 {
+        interval = time.Hour
+    }
+    tickerC := newTickerForTest
+    if tickerC == nil {
+        t := time.NewTicker(interval)
+        defer t.Stop()
+        tickerC = t.C
+    }
     for {
-        <-ticker.C
-        removed := client.RemoveExpiredClients()
-        if removed > 0 {
-            log.Default().Printf(
-                "Cleaned up %d expired sessions\n", removed
-            )
+        select {
+        case <-ctx.Done():
+            return
+        case <-tickerC:
+            removed := client.RemoveExpiredClients()
+            if removed > 0 {
+                log.Default().Printf(
+                    "Cleaned up %d expired sessions\n", removed
+                )
+            }
         }
     }
 }
@@ -120,7 +158,8 @@ func cleanupExpiredClients() {
 **职责**:
 - 创建 HTTP 服务器
 - 注册路由
-- 启动定时任务
+- 启动定时任务（全部 ctx 化，收到停机信号后随 ctx 取消而退出）
+- 处理 SIGINT / SIGTERM 优雅停机：取消 ctx → `client.ShutdownQueue()` 释放等待队列 → `aHttp.Shutdown(30s)` 关闭 HTTP 服务
 
 ### 3.2 路由模块
 
@@ -158,6 +197,8 @@ func SetupHttpRoute(e *gin.Engine) {
         }
     }
 
+    // 说明：父 group 与子 group 各套用了一次 MiddlewareSessionOnUrl()，
+    // 两次校验的是同一个 session 参数，行为等价
     speedtestRoute := session.Group("/speedtest", controller.MiddlewareSessionOnUrl())
     {
         if config.Config.FeatureFileSpeedtest {
@@ -180,20 +221,27 @@ func SetupHttpRoute(e *gin.Engine) {
 **路由图**:
 
 ```
-/:session/shell
-├── /session                      # 创建会话
+├── /session                      # 创建会话（SSE）
 ├── /method                       # 需要 Session Header
 │   ├── /iperf3/server
 │   ├── /ping
 │   ├── /speedtest_dot_net
 │   └── /cache/interfaces
-└── /session/:session             # 需要 Session URL 参数
-    ├── /shell
-    └── /speedtest
-        ├── /file/:filename
-        ├── /download
-        └── /upload
+├── /session/:session             # 需要 Session URL 参数
+│   ├── /shell
+│   └── /speedtest
+│       ├── /file/:filename
+│       ├── /download
+│       └── /upload
+└── /debug/pprof                  # Go pprof 调试端点（无鉴权）
+    ├── /  ├── /cmdline  ├── /profile  ├── /symbol
+    ├── /trace  ├── /allocs  ├── /block  ├── /goroutine
+    └── /heap  ├── /mutex  ├── /threadcreate
 ```
+
+> `/debug/pprof/*` 由 `backend/http/init.go:61` 的 `registerPprof()` **无条件注册**（未按环境关闭），共 13 个端点：
+> `GET /debug/pprof/`、`/cmdline`、`/profile`、`/symbol`、`/trace`、`/allocs`、`/block`、`/goroutine`、`/heap`、`/mutex`、`/threadcreate`，以及 `POST /debug/pprof/symbol`。
+> **该组不经过 Session 鉴权中间件**，对外暴露前请自行评估风险。
 
 ### 3.3 中间件模块
 
@@ -334,20 +382,11 @@ func Handle(c *gin.Context) {
 }
 ```
 
-**安全要点**：`buildClientConfig` 只把 `*ALSConfig` 中客户端需要的字段（`feature_*`、`speedtest_files`、`sponsor_message`、`my_ip`）投影到 `ClientConfig` DTO，**不下发** `listen_host`/`listen_port`/`iperf3_*_port`/`public_ipv4`/`public_ipv6`/`location` 等服务端内部字段。
+**安全要点**：`buildClientConfig` 只把 `*ALSConfig` 中客户端需要的字段投影到 `ClientConfig` DTO。
+**被排除的仅是** `listen_host`/`listen_port`（`json:"-"`）与 iperf3 端口段（`Iperf3StartPort`/`Iperf3EndPort`，`json:"-"`）；
+`location`、`public_ipv4`、`public_ipv6` **会随 `Config` 事件下发**——前端 `Information.vue` 依赖它们展示「位置 / IPv4 / IPv6」。
 
 `configGetter` 是测试注入点（生产中读 `config.Config`），便于端到端测试。
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case msg, ok := <-channel:
-            if !ok { return }
-            c.SSEvent(msg.Name, msg.Content)
-        }
-    }
-}
-```
 
 ### 4.3 Ping 控制器
 
@@ -535,13 +574,33 @@ func BroadCastMessage(name string, content string) {
 
 **队列处理**:
 ```go
-func HandleQueue() {
-    ticker := time.NewTicker(1 * time.Second)
-    for range ticker.C {
-        // 处理排队消息
+// HandleQueue 持续排空全局 FIFO 队列，直到 ctx 被取消。
+func HandleQueue(ctx context.Context) {
+    defer ShutdownQueue()
+    for {
+        // 队列非空则直接进入 drain，否则阻塞等待唤醒信号
+        queueLock.Lock()
+        if len(queueEntries) > 0 {
+            queueLock.Unlock()
+            goto drain
+        }
+        queueLock.Unlock()
+
+        select {
+        case <-ctx.Done():
+            ShutdownQueue()
+            return
+        case <-queueWakeup:
+        }
+
+    drain:
+        // FIFO 取出队头处理
+        ...
     }
 }
 ```
+> 该循环**不是定时轮询**：它阻塞在 `queueWakeup` 通道上，由 `WaitQueue` 的非阻塞唤醒写入驱动；
+> `ctx` 取消（`SIGINT`/`SIGTERM`）时立即退出并释放仍在排队的条目。
 
 ## 6. 定时任务模块
 
@@ -552,46 +611,50 @@ func HandleQueue() {
 **文件**: `backend/als/timer/system.go`
 
 ```go
-func UpdateSystemResource() {
-    ticker := time.NewTicker(1 * time.Second)
-    for range ticker.C {
-        var m runtime.MemStats
-        runtime.ReadMemStats(&m)
-        
-        memoryUsage := fmt.Sprintf("%.1f%%", 
-            float64(m.Alloc)/float64(m.Sys)*100)
-        
-        client.BroadCastMessage("SystemResource", memoryUsage)
+var updateInterval = 5 * time.Second
+
+func UpdateSystemResourceContext(ctx context.Context) {
+    var m runtime.MemStats
+
+    t := time.NewTicker(updateInterval)
+    defer t.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-t.C:
+            runtime.ReadMemStats(&m)
+            client.BroadCastMessage("MemoryUsage", strconv.FormatUint(m.Sys, 10))
+        }
     }
 }
 ```
+
+> 广播周期 **5 秒**，广播内容为 `m.Sys`（自 Go 运行时向系统申请的字节数，**不是** `m.Alloc`，也不是百分比），
+> 事件名为 **`MemoryUsage`**。
 
 ### 6.2 网卡流量更新
 
 **文件**: `backend/als/timer/interface_traffic.go`
 
 ```go
-func SetupInterfaceBroadcast() {
+func SetupInterfaceBroadcastContext(ctx context.Context) {
     ticker := time.NewTicker(1 * time.Second)
-    for range ticker.C {
-        interfaces, _ := net.Interfaces()
-        var traffic []InterfaceTraffic
-        
-        for _, iface := range interfaces {
-            rx, tx := getTraffic(iface.Name)
-            traffic = append(traffic, InterfaceTraffic{
-                Name:      iface.Name,
-                RxBytes:   rx,
-                TxBytes:   tx,
-                Timestamp: time.Now(),
-            })
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            updateInterfaceTraffic()
         }
-        
-        client.BroadCastMessage("InterfaceTraffic", 
-            json.Marshal(traffic))
     }
 }
 ```
+
+> 实际取数逻辑在同文件的 `updateInterfaceTraffic()` 中（`net.Interfaces()` → 过滤 `docker*` 前缀与 `lo` → 读取收发字节），
+> 广播周期 **1 秒**。
 
 ## 7. 配置模块
 
@@ -609,8 +672,10 @@ func SetupInterfaceBroadcast() {
 
 ```go
 type Server struct {
-    engine *gin.Engine
-    listen string
+    engine     *gin.Engine
+    listen     string
+    httpServer *http.Server
+    mu         sync.Mutex
 }
 
 func CreateServer() *Server {
@@ -619,11 +684,31 @@ func CreateServer() *Server {
         engine: gin.Default(),
         listen: ":8080",
     }
+    e.registerPprof()
     return e
 }
 
 func (e *Server) Start() error {
-    return e.engine.Run(e.listen)
+    e.mu.Lock()
+    if e.httpServer != nil {
+        e.mu.Unlock()
+        return errors.New("server already started")
+    }
+    e.httpServer = newHTTPServer(e)
+    srv := e.httpServer
+    e.mu.Unlock()
+    return srv.ListenAndServe()
+}
+
+func (e *Server) Shutdown(ctx context.Context) error {
+    e.mu.Lock()
+    srv := e.httpServer
+    e.mu.Unlock()
+    if srv == nil {
+        return nil
+    }
+    log.Default().Println("Shutting down HTTP server...")
+    return srv.Shutdown(ctx)
 }
 ```
 
@@ -631,6 +716,21 @@ func (e *Server) Start() error {
 - 设置 Gin 为 Release 模式
 - 创建默认引擎（包含 Logger、Recovery 中间件）
 - 设置监听地址
+- 注册 `/debug/pprof/*` 调试端点（`registerPprof()`，无鉴权）
+- `Start()` 构造独立 `*http.Server`（带超时）并监听；重复启动返回 `server already started`
+- `Shutdown(ctx)` 按传入上下文优雅关闭
+
+**超时配置**（`backend/http/init.go:41-46`）：
+
+| 项 | 值 | 说明 |
+|---|---|---|
+| `ReadHeaderTimeout` | 10s | 防止 Slowloris 式慢速头部长期占用文件描述符 |
+| `ReadTimeout` | 30s | 整个请求体读取上限 |
+| `WriteTimeout` | 10m | 响应写出窗口上限；与长连接流式端点（SSE、大文件下载）共享。原为 30s，会误杀空闲 SSE 流，故放宽到 10m |
+| `IdleTimeout` | 120s | 回收 keep-alive 空闲连接 |
+
+> `WriteTimeout` 之所以要放宽，是因为 SSE 端点会周期发送 keepalive 注释帧（默认 15s，详见 [interfaces.md](./interfaces.md)）。
+> `gosec G112` 要求这四项均非零。
 
 ## 9. FakeShell 模块
 
@@ -663,10 +763,16 @@ var UIStaticFiles embed.FS
 ```go
 func handleStatisFile(filePath string, c *gin.Context) {
     uiFs := iEmbed.UIStaticFiles
-    subFs, _ := fs.Sub(uiFs, "ui")
+    subFs, err := fs.Sub(uiFs, "ui")
+    if err != nil {
+        log.Default().Printf("static fs sub failed: %v", err)
+        c.String(500, "Internal server error")
+        c.Abort()
+        return
+    }
     httpFs := http.FileServer(http.FS(subFs))
-    
-    _, err := fs.ReadFile(subFs, filePath)
+
+    _, err = fs.ReadFile(subFs, filePath)
     if err != nil {
         c.String(404, "Not found")
         c.Abort()
@@ -677,9 +783,9 @@ func handleStatisFile(filePath string, c *gin.Context) {
 ```
 
 **流程**:
-1. 从 embed.FS 创建子文件系统
+1. 从 embed.FS 创建子文件系统（失败返回 500 `Internal server error`）
 2. 创建 HTTP 文件服务器
-3. 检查文件是否存在
+3. 检查文件是否存在（不存在返回 404 `Not found`）
 4. 如果存在则服务
 
 ## 11. 依赖管理
@@ -691,17 +797,18 @@ func handleStatisFile(filePath string, c *gin.Context) {
 ```go
 module github.com/samlm0/als/v2
 
-go 1.26
+go 1.26.9
 
 require (
-    github.com/creack/pty v1.1.24          // PTY 支持
-    github.com/gin-gonic/gin v1.12.0       // Web 框架
-    github.com/google/uuid v1.6.0          // UUID 生成
-    github.com/gorilla/websocket v1.5.3    // WebSocket
-    github.com/reeflective/console v0.1.25 // 交互式 CLI
-    github.com/spf13/cobra v1.10.2         // CLI 工具
-    github.com/samlm0/go-ping v0.1.0       // Ping 库
-    github.com/miekg/dns v1.1.72           // DNS 解析
+    github.com/creack/pty v1.1.24           // PTY 支持
+    github.com/gin-gonic/gin v1.12.0        // Web 框架
+    github.com/google/uuid v1.6.0           // UUID 生成
+    github.com/gorilla/websocket v1.5.3     // WebSocket
+    github.com/miekg/dns v1.1.73            // DNS 解析
+    github.com/reeflective/console v0.5.0   // 交互式 CLI
+    github.com/samlm0/go-ping v0.1.0        // Ping 库
+    github.com/spf13/cobra v1.10.2          // CLI 工具
+    github.com/vishvananda/netlink v1.3.1   // 网卡流量统计
 )
 ```
 
@@ -729,27 +836,24 @@ require (
 
 ## 12. 错误处理
 
-### 12.1 统一错误响应
+### 12.1 错误响应
+
+ALS **没有**统一的 `handleError` 辅助函数，错误响应是**内联**写出的。常见两处：
 
 ```go
-func handleError(c *gin.Context, err error) {
-    c.JSON(http.StatusInternalServerError, gin.H{
-        "success": false,
-        "error":   err.Error(),
-    })
-}
+// backend/als/controller/middleware.go:209-214（会话参数非法）
+c.AbortWithStatus(http.StatusBadRequest)
+
+// backend/als/route.go:80-83（静态文件系统挂载失败）
+c.String(500, "Internal server error")
+c.Abort()
 ```
 
 ### 12.2 Context 错误处理
 
 ```go
-ctx, cancel := context.WithCancel(session.GetContext())
-go func() {
-    <-ctx.Done()
-    if cmd.Process != nil {
-        cmd.Process.Kill()
-    }
-}()
+ctx, cancel := context.WithCancel(session.GetContext(ginC.Request.Context()))
+defer cancel()
 ```
 
 **优势**:

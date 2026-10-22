@@ -2,7 +2,7 @@
 
 **模块路径**: `backend/fakeshell/`
 
-**最后更新**: 2026-04-22
+**最后更新**: 2026-10-22
 
 > 本文档描述的是**端到端「控制台 (Fake Shell)」功能的最内层**（命令白名单实现层）。完整端到端链路（前端 Xterm → WebSocket 桥 → 本包）见 [控制台 (Fake Shell)](console.md#1)；该功能由 feature flag `FeatureShell` (环境变量 `UTILITIES_FAKESHELL`) 统一控制，详见 [功能开关 §3.4](feature-flags.md#34)。
 
@@ -288,7 +288,9 @@ c := exec.CommandContext(cmd.Context(), command, args...)
 | `nexttrace` | 高级路由跟踪 | `FeatureTraceroute` | nexttrace |
 | `mtr` | 诊断工具 | `FeatureMTR` | mtr |
 | `speedtest` | 网速测试 | `FeatureSpeedtestDotNet` | speedtest |
-| `help` | 显示帮助 | - | - |
+
+> **没有 `help` 命令**：`backend/fakeshell/menu.go:73-76` 用一个隐藏的 `no-help` 占位命令替换了 Cobra 的默认 help
+> （`rootCmd.SetHelpCommand(&cobra.Command{Use: "no-help", Hidden: true})`），因此 `help` / `--help` 均不可用。
 
 ### 6.2 系统依赖检测
 
@@ -315,7 +317,7 @@ if err != nil {
 ```go
 argsFilter["ping"] = func(args []string) ([]string, error) {
     // 禁止 flood 模式
-    var re = regexp.MustCompile(`(?m)^-f$|^-\S+f\S*$`)
+    var re = regexp.MustCompile(`(?m)^-?f$|^-\S+f\S*$`)
     for _, str := range args {
         if len(re.FindAllString(str, -1)) != 0 {
             return []string{}, errors.New("dangerous flag detected, stop running")
@@ -328,8 +330,11 @@ argsFilter["ping"] = func(args []string) ([]string, error) {
 **危险参数**:
 | 参数 | 危险原因 | 处理 |
 |------|---------|------|
-| `-f` | Flood ping (DDoS) | 禁止 |
-| `-\S+f\S*` | 组合参数如 `-cf4` | 禁止 |
+| `-f` / `f` | Flood ping (DDoS) | 拦截 |
+| `-\S+f\S*` | 组合参数如 `-cf4` | 拦截 |
+
+> 正则 `(?m)^-?f$|^-\S+f\S*$` 中的 `-?` 表示**允许**单独的 `-f` 或 `f` 被放行以外的其它形态匹配，
+> 实际拦截的是 `-f` 与任何含 `f` 的组合形式（如 `-cf4`）。
 
 ### 7.2 扩展过滤
 
@@ -523,12 +528,15 @@ func handleNewConnection(...) {
 
 ### 12.3 超时控制
 
-```go
-ctx, cancel := context.WithTimeout(session.GetContext(), 30*time.Second)
-defer cancel()
+当前实现**没有独立超时**，命令直接挂在 Cobra 命令的上下文上执行：
 
-c := exec.CommandContext(ctx, command, args...)
+```go
+// backend/fakeshell/commands/map.go:26
+c := exec.CommandContext(cmd.Context(), command, args...)
 ```
+
+即：Shell 会话结束 → `cmd.Context()` 取消 → 子进程被终止。
+如需超时保护，须自行包一层 `context.WithTimeout`（当前仓库中没有）。
 
 ## 13. 调试技巧
 

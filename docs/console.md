@@ -2,7 +2,7 @@
 
 **类别**: 核心概念
 
-**最后更新**: 2026-04-22
+**最后更新**: 2026-10-22
 
 > 本文档描述「控制台 (Fake Shell)」功能的**端到端视图**：前端 Xterm 终端 → WebSocket 桥 → `backend/fakeshell/` 限制命令菜单。如需了解最内层 Go 包（菜单、命令注册、白名单）的实现细节，见 [FakeShell 模块](fakeshell.md)。该功能由 feature flag `FeatureShell` (环境变量 `UTILITIES_FAKESHELL`) 统一控制，详见 [功能开关 §3.4](feature-flags.md#34)。
 
@@ -289,7 +289,7 @@ for command, feature := range features {
 ```go
 argsFilter := map[string]func([]string) ([]string, error){
     "ping": func(args []string) ([]string, error) {
-        re := regexp.MustCompile(`(?m)^-f$|^-\S+f\S*$`)
+        re := regexp.MustCompile(`(?m)^-?f$|^-\S+f\S*$`)
         for _, str := range args {
             if len(re.FindAllString(str, -1)) != 0 {
                 return []string{}, errors.New("dangerous flag detected")
@@ -402,8 +402,8 @@ ws.onopen = () => {
 
 **Xterm.js 集成**:
 ```javascript
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 
 const term = new Terminal();
 const fitAddon = new FitAddon();
@@ -440,7 +440,9 @@ fitAddon.onResize(size => {
 | `nexttrace <host>` | 高级路由跟踪 | `UTILITIES_TRACEROUTE` |
 | `mtr <host>` | 诊断工具 | `UTILITIES_MTR` |
 | `speedtest` | 网速测试 | `UTILITIES_SPEEDTESTDOTNET` |
-| `help` | 显示帮助 | - |
+
+> **没有 `help` 命令**：`backend/fakeshell/menu.go:73-76` 用一个隐藏的 `no-help` 占位命令替换了 Cobra 的默认 help
+> （`rootCmd.SetHelpCommand(&cobra.Command{Use: "no-help", Hidden: true})`），因此 `help` / `--help` 均不可用。
 
 ### 6.2 系统依赖
 
@@ -594,14 +596,20 @@ if session.ClientIP != clientIP {
 }
 ```
 
-### 9.4 执行超时
+### 9.4 执行上下文与超时
+
+当前实现**没有独立超时**，只有随会话生命周期取消的 `context`：
 
 ```go
-ctx, cancel := context.WithTimeout(session.GetContext(), 5*time.Minute)
+// backend/als/controller/shell/shell.go:67-74
+ctx, cancel := context.WithCancel(session.GetContext(ginC.Request.Context()))
 defer cancel()
 
 cmd := exec.CommandContext(ctx, ex, "--shell")
 ```
+
+即：会话断开 → `ctx` 取消 → 子进程被 `exec.CommandContext` 终止。
+如需超时保护，须自行包一层 `context.WithTimeout`（当前仓库中没有）。
 
 ## 10. 调试技巧
 
@@ -644,16 +652,16 @@ fmt.Printf("Executing: %s %v\n", command, args)
 ### 11.1 缓冲区优化
 
 ```go
-// 增大缓冲区
-ws.Upgrader.ReadBufferSize = 8192
-ws.Upgrader.WriteBufferSize = 8192
+// 缓冲区大小（backend/als/controller/shell/shell.go:44-48）
+ws.Upgrader.ReadBufferSize = 4096
+ws.Upgrader.WriteBufferSize = 4096
 ```
 
 ### 11.2 写入批处理
 
 ```go
 // 批量读取 PTY 输出
-buf := make([]byte, 8192)
+buf := make([]byte, 4096)
 for {
     n, _ := ptmx.Read(buf)
     if n == 0 { break }

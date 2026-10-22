@@ -2,9 +2,9 @@
 
 **项目名称**: ALS (Another Looking-glass Server)
 
-**文档版本**: 1.0
+**文档版本**: 1.1
 
-**最后更新**: 2026-06-23
+**最后更新**: 2026-10-22
 <!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json）-->
 
 ## 快速导航
@@ -16,6 +16,8 @@
 | [系统架构](./architecture.md) | 系统整体架构、技术栈和组件说明 |
 | [接口文档](./interfaces.md) | API 接口规范和使用说明 |
 | [开发者指南](./developer-guide.md) | 开发环境搭建、构建和测试指南 |
+| [文档发布指南](./deployment-guide.md) | 文档站点的构建与发布流程 |
+| [Actions 记录保留策略](./actions-retention.md) | GitHub Actions 执行记录的自动清理策略 |
 
 ### 专有概念
 
@@ -48,7 +50,7 @@ ALS 是一个轻量级的 Looking-glass 服务器，用于提供网络诊断和�
 ### 技术栈
 
 **后端**:
-- Go 1.26.5
+- Go 1.26.9
 - Gin Web Framework
 - Gorilla WebSocket
 - Cobra CLI

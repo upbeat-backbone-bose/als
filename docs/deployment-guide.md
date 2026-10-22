@@ -1,23 +1,31 @@
 # 文档发布指南
 
+**最后更新**: 2026-10-22
+
 本文档说明如何将项目文档发布到 GitHub Pages。
 
 ## 目录结构
 
 ```
 als/
-├── docs/                      # GitHub Pages 文档目录
-│   ├── README.md              # 首页
+├── docs/                      # GitHub Pages 文档目录（14 份 .md）
+│   ├── index.md               # 文档索引（站点首页入口）
 │   ├── architecture.md        # 系统架构
 │   ├── interfaces.md          # 接口文档
 │   ├── developer-guide.md     # 开发者指南
-│   ├── mkdocs.yml             # MkDocs 配置（可选）
-│   ├── backend.md / ui.md / config.md / fakeshell.md   # 模块文档
-│   └── session.md / feature-flags.md / console.md   # 概念文档
-├── .monkeycode/docs/          # 源文档目录
+│   ├── deployment-guide.md    # 文档发布指南（本文）
+│   ├── backend.md / ui.md / config.md / console.md / fakeshell.md   # 模块文档
+│   ├── session.md / feature-flags.md                            # 概念文档
+│   ├── backend-perf.md        # 后端性能基线
+│   └── actions-retention.md   # Actions 执行记录保留策略
+├── mkdocs.yml                 # MkDocs 配置（位于仓库根目录）
+├── requirements-dev.txt       # 文档构建依赖
+├── scripts/                   # 脚本
 └── .github/workflows/
     └── docs.yml               # GitHub Actions 工作流
 ```
+
+> `docs/` 是文档的**唯一事实来源**，仓库中不存在其它「源文档目录」（也没有 `.monkeycode/docs/`）。
 
 ## 工作流程
 
@@ -30,15 +38,16 @@ als/
    git push origin master
    ```
 
-2. **修改了 docs 目录下的文件**
+2. **修改了会触发构建的文件**（`.github/workflows/docs.yml` 的 `on.push.paths`）
    - `docs/**`
-   - `.monkeycode/docs/**`
+   - `mkdocs.yml`
+   - `requirements-dev.txt`
+   - `.github/workflows/docs.yml`
 
 3. **GitHub Actions 自动执行**
    - 检出代码
-   - 安装 MkDocs 依赖
-   - 同步文档（从 `.monkeycode/docs` 到 `docs/`）
-   - 构建静态站点
+   - 安装 Python 3.11 与 `requirements-dev.txt` 中的 MkDocs 依赖
+   - `mkdocs build` 生成静态站点
    - 部署到 GitHub Pages
 
 ### 手动触发
@@ -90,33 +99,20 @@ git commit -m "docs: 更新架构文档"
 git push origin master
 ```
 
-### 方式二：使用 .monkeycode/docs（推荐）
-
-```bash
-# 1. 编辑源文档
-vim .monkeycode/docs/architecture.md
-
-# 2. 同步到 docs 目录
-cp -r .monkeycode/docs/* docs/
-
-# 3. 提交并推送
-git add docs/ .monkeycode/docs/
-git commit -m "docs: 更新所有文档"
-git push origin master
-```
-
-### 方式三：使用 AI 生成文档
+### 方式二：使用 AI 辅助生成文档
 
 ```bash
 # 使用项目 Wiki skill 生成/更新文档
 /project-wiki
 
-# 然后同步到 docs 目录
-cp -r .monkeycode/docs/* docs/
+# 把生成结果落到 docs 目录
+cp -r <生成目录>/* docs/
 git add docs/
 git commit -m "docs: 同步 AI 生成的文档"
 git push origin master
 ```
+
+> 仓库中**不存在** `.monkeycode/docs/` 之类的独立源文档目录，文档直接维护在 `docs/` 下。
 
 ## MkDocs 主题（可选）
 
@@ -260,30 +256,7 @@ date: 2026-04-22
 ---
 ```
 
-### 4. 自动化同步
-
-创建同步脚本 `scripts/sync-docs.sh`：
-
-```bash
-#!/bin/bash
-# 同步 .monkeycode/docs 到 docs
-set -e
-
-echo "Syncing documents..."
-cp -r .monkeycode/docs/* docs/
-
-echo "Documents synced successfully!"
-git status
-```
-
-使用：
-```bash
-chmod +x scripts/sync-docs.sh
-./scripts/sync-docs.sh
-git add docs/
-git commit -m "docs: 同步文档"
-git push
-```
+> （以上为**示例**，非本文档的实际版本信息；本文档的实际标记是文件顶部的「最后更新」。）
 
 ## 相关资源
 

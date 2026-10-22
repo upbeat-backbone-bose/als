@@ -2,7 +2,7 @@
 
 **类别**: 核心概念
 
-**最后更新**: 2026-04-22
+**最后更新**: 2026-10-22
 
 ## 1. 概述
 
@@ -13,11 +13,19 @@ ALS 系统的所有功能都可以通过环境变量动态开关，无需修改�
 ### 2.1 配置加载流程
 
 ```
-config.Load()
+config.Load()                    # --shell 模式只走到这里
 ├── GetDefaultConfig()         # 设置默认值
-├── LoadFromEnv()              # 从环境变量加载
-└── LoadSponsorMessage()       # 加载赞助商信息 (可选)
+└── LoadFromEnv()              # 从环境变量加载
+
+config.LoadWebConfig()           # HTTP 服务器模式
+├── Load()                      # = GetDefaultConfig() + LoadFromEnv()
+├── LoadSponsorMessage()        # 加载赞助商信息
+├── 检查 iperf3 是否安装
+└── 获取公网 IP 和位置信息
 ```
+
+> `Load()` 只做「默认值 + 环境变量」两件事；`LoadSponsorMessage()` 属于 `LoadWebConfig()`。
+> `--shell` 模式（`backend/main.go`）只调用 `config.Load()`，**不会加载赞助商消息**。
 
 ### 2.2 配置结构
 
@@ -139,8 +147,8 @@ func LoadFromEnv() {
         "UTILITIES_FAKESHELL":       &Config.FeatureShell,
         "UTILITIES_IPERF3":          &Config.FeatureIperf3,
         "UTILITIES_MTR":             &Config.FeatureMTR,
-        // 注意: UTILITIES_TRACEROUTE 和 UTILITIES_FILESPEEDTEST 
-        // 从 config/init.go 的 GetDefaultConfig() 初始化
+        "UTILITIES_FILESPEEDTEST":   &Config.FeatureFileSpeedtest,
+        "UTILITIES_TRACEROUTE":      &Config.FeatureTraceroute,
     }
 
     for envVar, configField := range envVarsBool {
@@ -167,7 +175,7 @@ func GetDefaultConfig() *ALSConfig {
         Iperf3StartPort: 30000,
         Iperf3EndPort:   31000,
         
-        SpeedtestFileList: []string{"1MB", "10MB", "100MB", "1GB"},
+        SpeedtestFileList: []string{"1MB", "10MB", "100MB", "1GB", "100GB"},
         
         // 所有功能默认启用
         FeaturePing:            true,
@@ -248,27 +256,34 @@ func SetupHttpRoute(e *gin.Engine) {
 
 前端通过 SSE 获取服务器配置：
 
-```javascript
+```go
 // backend/als/controller/session/session.go
 //
-// Handle builds a ClientConfig DTO (not the raw *ALSConfig) so that
-// internal fields such as listen_host/port and iperf3 port range are
-// never sent to the client.
+// ClientConfig is the minimal projection of ALSConfig that the UI consumes.
+// Internal fields (listen_host/port, iperf3 port range) are intentionally
+// excluded; the UI must never see them.
 
 type ClientConfig struct {
-    ClientIP             string   `json:"my_ip"`
-    SpeedtestFileList    []string `json:"speedtest_files"`
-    SponsorMessage       string   `json:"sponsor_message"`
-    FeaturePing          bool     `json:"feature_ping"`
-    FeatureShell         bool     `json:"feature_shell"`
-    FeatureLibrespeed    bool     `json:"feature_librespeed"`
-    FeatureFileSpeedtest bool     `json:"feature_filespeedtest"`
-    FeatureSpeedtestDotNet bool   `json:"feature_speedtest_dot_net"`
-    FeatureIperf3        bool     `json:"feature_iperf3"`
-    FeatureMTR           bool     `json:"feature_mtr"`
-    FeatureTraceroute    bool     `json:"feature_traceroute"`
-    FeatureIfaceTraffic  bool     `json:"feature_iface_traffic"`
+    ClientIP               string   `json:"my_ip"`
+    Location               string   `json:"location"`
+    PublicIPv4             string   `json:"public_ipv4"`
+    PublicIPv6             string   `json:"public_ipv6"`
+    SpeedtestFileList      []string `json:"speedtest_files"`
+    SponsorMessage         string   `json:"sponsor_message"`
+    FeaturePing            bool     `json:"feature_ping"`
+    FeatureShell           bool     `json:"feature_shell"`
+    FeatureLibrespeed      bool     `json:"feature_librespeed"`
+    FeatureFileSpeedtest   bool     `json:"feature_filespeedtest"`
+    FeatureSpeedtestDotNet bool     `json:"feature_speedtest_dot_net"`
+    FeatureIperf3          bool     `json:"feature_iperf3"`
+    FeatureMTR             bool     `json:"feature_mtr"`
+    FeatureTraceroute      bool     `json:"feature_traceroute"`
+    FeatureIfaceTraffic    bool     `json:"feature_iface_traffic"`
 }
+
+> `location` / `public_ipv4` / `public_ipv6` **会随 `Config` 事件下发给客户端**（前端 `Information.vue`
+> 依赖它们展示「位置 / IPv4 / IPv6」）。**被排除的仅是** `listen_host` / `listen_port` 与
+> iperf3 端口段（`json:"-"`）。
 
 func Handle(c *gin.Context) {
     clientCfg := buildClientConfig(config.Config, c.ClientIP())
@@ -397,6 +412,7 @@ docker run -d \
 
 ### 8.2 自动检测
 
+**服务端（iperf3）**:
 ```go
 func LoadWebConfig() {
     // 自动检测 iperf3
@@ -408,10 +424,25 @@ func LoadWebConfig() {
 }
 ```
 
+**FakeShell（逐命令探测）**:
+```go
+// backend/fakeshell/menu.go:54-61
+_, err := exec.LookPath(command)
+if err != nil {
+    if !showedIsFirstTime {
+        fmt.Println("Error: " + command + " is not installed")
+    }
+    hasNotFound = true
+    continue        // 该命令不注册
+}
+```
+
 **说明**:
 - 系统会提示工具缺失警告
 - 自动禁用相关功能
 - 不影响其他功能运行
+- FakeShell 对 **ping / traceroute / nexttrace / speedtest / mtr 逐个命令**做 `exec.LookPath` 探测，
+  缺失的命令**只跳过注册**（不修改对应的功能开关），并打印 `Error: <cmd> is not installed`
 
 ## 9. 配置验证
 
