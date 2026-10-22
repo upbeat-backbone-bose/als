@@ -1,6 +1,6 @@
 # 系统架构
 
-**最后更新**: 2026-06-23
+**最后更新**: 2026-10-22
 <!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json）-->
 
 ## 1. 系统概述
@@ -66,16 +66,27 @@ ui/
 │   │   ├── Loading.vue     # 加载组件
 │   │   ├── Information.vue # 服务器信息展示
 │   │   ├── Speedtest.vue   # 测速组件
+│   │   ├── Speedtest/      # 测速子组件
+│   │   │   ├── FileSpeedtest.vue
+│   │   │   └── Librespeed.vue
 │   │   ├── Utilities.vue   # 工具集合组件
 │   │   ├── TrafficDisplay.vue  # 流量显示
+│   │   ├── Copy.vue        # 复制按钮
 │   │   ├── __tests__/          # 组件测试 (Vitest)
 │   │   │   ├── Copy.test.js
-│   │   │   └── Loading.test.js
+│   │   │   ├── Loading.test.js
+│   │   │   └── Speedtest.test.js
 │   │   └── Utilities/
 │   │       ├── Ping.vue    # Ping 工具
 │   │       ├── IPerf3.vue  # iPerf3 工具
 │   │       ├── Shell.vue   # Shell 终端
-│   │       └── SpeedtestNet.vue  # Speedtest.net
+│   │       ├── SpeedtestNet.vue  # Speedtest.net
+│   │       └── __tests__/  # 工具子组件测试
+│   │           ├── IPerf3.test.js
+│   │           ├── Ping.test.js
+│   │           └── SpeedtestNet.test.js
+│   ├── __tests__/          # 根组件测试
+│   │   └── App.test.js
 │   ├── assets/
 │   │   └── base.css        # Tailwind v4 入口样式
 │   ├── config/
@@ -93,12 +104,18 @@ ui/
 │   ├── App.vue             # 根组件
 │   └── main.js             # 入口文件
 ├── public/
-│   └── speedtest_worker.js # 测速 Web Worker
+│   ├── favicon.ico         # 站点图标
+│   └── speedtest_worker.js # 测速 Web Worker 占位（真实 worker 由子模块在构建时拷贝）
+├── speedtest/              # LibreSpeed 子模块 (独立，当前锁定 v6.3.1)
+├── index.html              # Vite 入口 HTML
+├── jsconfig.json           # JS 路径别名配置
 ├── vite.config.js          # Vite 入口 (薄壳)
 ├── vite.shared.js          # 共享 Vite 插件栈 (vue/tailwindcss/auto-import)
 ├── vitest.config.js        # Vitest 配置
 ├── eslint.config.js        # ESLint 10 flat config
-└── package.json
+├── package.json
+├── package-lock.json       # 依赖锁文件
+└── .prettierrc.json        # Prettier 配置
 ```
 
 **核心特性**:
@@ -111,7 +128,7 @@ ui/
 ### 3.2 后端组件
 
 **技术栈**:
-- Go 1.26.5
+- Go 1.26.9
 - Gin Web Framework
 - Gorilla WebSocket
 - Cobra CLI
@@ -121,6 +138,10 @@ ui/
 ```
 backend/
 ├── main.go                  # 程序入口
+├── go.mod                   # Go 模块定义
+├── go.sum                   # 依赖校验和
+├── go.work.sum              # workspace 校验和
+├── .golangci.yml            # golangci-lint 配置
 ├── als/                     # ALS 核心模块
 │   ├── als.go              # 初始化入口
 │   ├── route.go            # 路由配置
@@ -137,14 +158,22 @@ backend/
 ├── config/                  # 配置模块
 │   ├── init.go             # 配置初始化
 │   ├── load_from_env.go    # 环境变量加载
+│   ├── ip.go               # 公网 IP 获取
 │   └── location.go         # 位置信息获取
 ├── http/                    # HTTP 服务
 │   └── init.go             # HTTP 服务器初始化
 ├── fakeshell/               # Fake Shell 模块
 │   ├── main.go             # Shell 入口
 │   ├── menu.go             # 命令菜单
+│   ├── prompt.go           # 提示符设置
 │   └── commands/           # 命令实现
+├── internal/                # 内部工具包
+│   └── testutil/           # 测试辅助工具
+├── audit/                   # 规格与证据文档
+│   ├── SPEC.md
+│   └── EVIDENCE.md
 └── embed/                   # 嵌入资源
+    ├── ui.go               # //go:embed ui 的宿主文件
     └── ui/                 # 前端静态资源
 ```
 
@@ -183,6 +212,7 @@ backend/
 - 位置：`backend/als/controller/speedtest/librespeed.go`
 - 实现：基于 LibreSpeed 项目
 - 功能：下载/上传测试
+- 前端子模块：`ui/speedtest`（Git 子模块），当前锁定 **v6.3.1**
 
 **Speedtest.net**:
 - 位置：`backend/als/controller/speedtest/speedtest_cli.go`
@@ -213,6 +243,10 @@ backend/
 | `/session/:session/speedtest/file/:filename` | GET | 文件测速 | Session URL 参数 |
 | `/session/:session/speedtest/download` | GET | LibreSpeed 下载 | Session URL 参数 |
 | `/session/:session/speedtest/upload` | POST | LibreSpeed 上传 | Session URL 参数 |
+| `/debug/pprof/*` | GET/POST | Go pprof 调试端点（13 个） | **无** |
+
+> `/debug/pprof/*` 由 `backend/http/init.go:61` 的 `registerPprof()` **无条件注册**（未按环境关闭），
+> 且不经过 Session 鉴权中间件；对外暴露前请自行评估风险。
 
 ### 4.2 WebSocket
 
@@ -234,7 +268,7 @@ backend/
 | `LOCATION` | string | (自动获取) | 服务器位置 |
 | `PUBLIC_IPV4` | string | (自动获取) | 公网 IPv4 |
 | `PUBLIC_IPV6` | string | (自动获取) | 公网 IPv6 |
-| `SPEEDTEST_FILE_LIST` | string | "1MB 10MB 100MB 1GB" | 测速文件列表 |
+| `SPEEDTEST_FILE_LIST` | string | "1MB 10MB 100MB 1GB 100GB" | 测速文件列表 |
 | `SPONSOR_MESSAGE` | string | "" | 赞助商信息 |
 | `DISPLAY_TRAFFIC` | bool | true | 流量显示开关 |
 | `ENABLE_SPEEDTEST` | bool | true | LibreSpeed 开关 |
@@ -245,6 +279,8 @@ backend/
 | `UTILITIES_IPERF3_PORT_MAX` | int | 31000 | iPerf3 结束端口 |
 | `UTILITIES_MTR` | bool | true | MTR 开关 |
 | `UTILITIES_TRACEROUTE` | bool | true | Traceroute 开关 |
+| `UTILITIES_SPEEDTESTDOTNET` | bool | true | Speedtest.net 开关 |
+| `UTILITIES_FILESPEEDTEST` | bool | true | 文件测速开关 |
 
 ### 5.2 启动流程
 

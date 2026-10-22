@@ -1,6 +1,6 @@
 # 接口文档
 
-**最后更新**: 2026-04-22
+**最后更新**: 2026-10-22
 
 ## 1. 概述
 
@@ -58,7 +58,10 @@ data: <uuid-string>
 event: Config
 data: {
   "my_ip": "客户端 IP",
-  "speedtest_files": ["1MB", "10MB", "100MB", "1GB"],
+  "location": "服务器位置描述",
+  "public_ipv4": "公网 IPv4",
+  "public_ipv6": "公网 IPv6",
+  "speedtest_files": ["1MB", "10MB", "100MB", "1GB", "100GB"],
   "sponsor_message": "赞助商信息",
   "feature_ping": true,
   "feature_shell": true,
@@ -72,7 +75,7 @@ data: {
 }
 ```
 
-**字段裁剪说明**：`location`、`public_ipv4`、`public_ipv6` 这些服务端位置/网络信息**不再下发**给客户端（属于服务端内部信息，不应在任意持有 session id 的客户端上暴露）。同时也不会下发 `listen_host`、`listen_port`、`iperf3_start_port`、`iperf3_end_port` 这些运维端口范围。客户端需要的字段通过 `ClientConfig` DTO 投影后再下发。
+**字段裁剪说明**：服务端通过 `ClientConfig` DTO 投影后再下发，**被排除的仅是** `listen_host`、`listen_port` 与 iperf3 端口段（`iperf3_start_port` / `iperf3_end_port`）这些运维端口范围（`backend/als/controller/session/session.go:20-36`）。`location`、`public_ipv4`、`public_ipv6` **会正常下发给客户端**——前端 `Information.vue` 依赖它们渲染「位置 / IPv4 / IPv6」三项。
 
 **事件 3 - InterfaceCache**:
 ```
@@ -289,7 +292,7 @@ ws.onmessage = (event) => {
 
 **说明**: 
 - 文件大小从 `SPEEDTEST_FILE_LIST` 配置
-- 动态生成 (全零数据)
+- 动态生成（`crypto/rand` 随机字节流）
 
 ---
 
@@ -302,12 +305,12 @@ LibreSpeed 下载测试端点。
 **查询参数**:
 | 参数 | 类型 | 描述 |
 |------|------|------|
-| `size` | int | 数据块大小 (MB) |
+| `ckSize` | int | 每次下载的 chunk 数量（默认 4，上限 1024） |
 
 **响应**: 随机二进制数据流
 
 **说明**: 
-- 使用 `Math.random()` 生成随机数据
+- 使用 `crypto/rand` 生成随机数据（单块固定 1 MiB）
 - 用于模拟真实下载
 
 ---
@@ -362,7 +365,9 @@ LibreSpeed 上传测试端点。
 
 **响应**: JavaScript
 
-**嵌入**: `public/speedtest_worker.js`
+**嵌入**: 由构建期从 **LibreSpeed 子模块** `ui/speedtest/speedtest_worker.js` 拷贝到 `dist/speedtest_worker.js`
+（`ui/vite.shared.js` 的 `build-script` 插件在 `closeBundle()` 钩子中完成拷贝）。
+仓库中的 `ui/public/speedtest_worker.js` 只是 **0 字节占位文件**。
 
 ---
 
@@ -459,13 +464,26 @@ eventSource.addEventListener('InterfaceTraffic', (e) => {
 });
 ```
 
-#### SystemResource (周期性)
+#### MemoryUsage (周期性)
 ```javascript
-eventSource.addEventListener('SystemResource', (e) => {
-  const resource = JSON.parse(e.data);
-  console.log('Memory:', resource.memoryUsage);
+eventSource.addEventListener('MemoryUsage', (e) => {
+  // 负载为字节数的字符串（runtime.MemStats.Sys），不是 JSON 对象
+  const sysBytes = Number(e.data);
+  console.log('Memory (Sys):', sysBytes);
 });
 ```
+
+> 事件名为 **`MemoryUsage`**（不是 `SystemResource`），广播周期 **5 秒**，载荷是
+> `strconv.FormatUint(m.Sys, 10)` —— 即 Go 运行时向系统申请的字节数，不是百分比、也不是 `m.Alloc`。
+
+#### keepalive (周期性, SSE 注释帧)
+```
+\n:keepalive\n\n
+```
+
+> 服务端每 **15 秒**发送一个 SSE 注释帧（`backend/als/controller/session/session.go:61-66`）。
+> 浏览器不会为注释帧触发 `onmessage`，它的作用是让代理 / TCP 空闲超时不会关闭空闲流；
+> `backend/http/init.go:29-31` 正是据此把 `WriteTimeout` 从 30s 放宽到 10m。
 
 ---
 
@@ -497,13 +515,15 @@ eventSource.addEventListener('SystemResource', (e) => {
 }
 ```
 
-**功能未启用**:
+**功能未启用（对应路由未注册）**:
 ```http
 HTTP/1.1 404 Not Found
 Content-Type: text/plain
-
-Not found
 ```
+
+> 未注册的路由由 Gin 默认处理，返回 **404 且响应体为空**。
+> 带 `Not found` 文本的 404 来自**另一条路径**——静态资源不存在时由 `backend/als/route.go:87`
+> 的 `c.String(404, "Not found")` 产生。两者不要混淆。
 
 ---
 
@@ -516,7 +536,7 @@ Not found
 ```
 - Ping 测试：每分钟最多 10 次
 - iPerf3：每小时最多 5 次
-- Shell: 每会话最多 10 个并发命令
+- Shell: 每会话最多 10 个并发命令（**建议值**；当前源码中未发现该并发上限约束）
 ```
 
 ---

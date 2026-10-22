@@ -2,7 +2,7 @@
 
 **类别**: 核心概念
 
-**最后更新**: 2026-04-22
+**最后更新**: 2026-10-22
 
 ## 1. 概述
 
@@ -31,6 +31,11 @@ ALS 使用基于内存的会话管理机制，用于在无状态 HTTP 环境中�
   |<-----------------------------|
   |                              |
 ```
+
+**SSE 重连（resume）**:
+`GET /session?resume=<sessionId>` 会**复用已有会话**并保持同一个 session id
+（`backend/als/controller/session/session.go:79` 起的 Resume 路径），前端在 EventSource 断线重连时
+应带上原 session id，避免重复创建会话。前端实现见 [ui.md](./ui.md) 的「8. SSE 连接管理」。
 
 **代码实现** (`backend/als/controller/session/session.go`):
 
@@ -288,31 +293,47 @@ func BroadCastMessage(name string, content string) {
 
 **定时广播系统资源**:
 ```go
-func UpdateSystemResource() {
-    ticker := time.NewTicker(1 * time.Second)
-    for range ticker.C {
-        // 获取内存使用
-        var m runtime.MemStats
-        runtime.ReadMemStats(&m)
-        memoryUsage := fmt.Sprintf("%.1f%%", float64(m.Alloc)/...)
-        
-        BroadCastMessage("SystemResource", memoryUsage)
+var updateInterval = 5 * time.Second
+
+func UpdateSystemResourceContext(ctx context.Context) {
+    var m runtime.MemStats
+
+    t := time.NewTicker(updateInterval)
+    defer t.Stop()
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-t.C:
+            runtime.ReadMemStats(&m)
+            client.BroadCastMessage("MemoryUsage", strconv.FormatUint(m.Sys, 10))
+        }
     }
 }
 ```
 
+> 广播周期 **5 秒**；事件名为 **`MemoryUsage`**（不是 `SystemResource`）；载荷是 `m.Sys`
+> （Go 运行时向系统申请的字节数，**不是** `m.Alloc`，也不是百分比）。
+
 **定时广播网卡流量**:
 ```go
-func SetupInterfaceBroadcast() {
+func SetupInterfaceBroadcastContext(ctx context.Context) {
     ticker := time.NewTicker(1 * time.Second)
-    for range ticker.C {
-        // 获取网卡流量
-        traffic := getInterfaceTraffic()
-        
-        BroadCastMessage("InterfaceTraffic", traffic)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            updateInterfaceTraffic()
+        }
     }
 }
 ```
+
+> 取数逻辑在同文件的 `updateInterfaceTraffic()` 中（`net.Interfaces()` → 过滤 `docker*` 前缀与 `lo`
+> → 读取收发字节），广播周期 **1 秒**。
 
 ## 6. 安全考虑
 

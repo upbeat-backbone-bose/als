@@ -1,11 +1,21 @@
 # Backend Performance Baseline
 
+**最后更新**: 2026-10-22
+
 This document records the measured performance of the als backend at a
 specific commit, so future changes can be compared against it. The
 numbers below come from `go test -bench=. -benchmem -benchtime=2s
 -count=5 ./als/client/...` (wall time) and `go tool pprof
 -peek PipeToChannel prof.out` (CPU attribution), with 3 profile runs
 per buffer configuration to control for sampling noise.
+
+> ⚠️ **这些数值是历史基准，不是当前 HEAD 的实测值。**
+> 对应提交：数据产出于 `87a8c40`（2026-06-24），同批优化见 `9c23467` / `52bb0f2`。
+> `backend/als/client/` 自 `4b60f51`（2026-06-25）与 `f5753b4`（2026-08-10）之后**未重测**，
+> 且 `bench_test.go` 新增了 `BenchmarkWaitQueueCycle`、`BenchmarkShutdownQueue` 两个基准
+> （本文档**未记录**其数值）。
+> 引用本文任何数值时都必须注明基线提交；需要当前 HEAD 的数值请按文末
+> 「How to reproduce these numbers」重跑。
 
 ## Benchmark results (Intel Xeon, GOMAXPROCS=2)
 
@@ -49,6 +59,11 @@ simulate a 64KB iperf3-style stream. This is the same synthetic load
 as commit `9c23467` and `52bb0f2`; the absolute numbers will differ
 from real OS-pipe traffic but the **relative ordering** between buffer
 sizes is preserved because all three share the same input data.
+
+Baseline commit for the numbers in this document: `87a8c40`
+(2026-06-24, "feat(backend): Go code review fixes, test coverage, and
+performance optimizations"). Not re-measured since; see the warning at
+the top of this file.
 
 ### Aggregated results (5-run bench + 3-run profile, mean ± std-dev, [min, max])
 

@@ -1,6 +1,6 @@
 # 开发者指南
 
-**最后更新**: 2026-06-23
+**最后更新**: 2026-10-22
 <!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json / .github/workflows/ci.yml）-->
 
 ## 1. 开发环境搭建
@@ -16,7 +16,7 @@
 
 | 软件 | 版本 | 用途 |
 |------|------|------|
-| Go | 1.26+ | 后端开发 |
+| Go | 1.26.9 | 后端开发 |
 | Node.js | 22+ | 前端开发 |
 | npm | 10+ | 前端依赖管理 |
 | Git | 最新 | 版本控制 |
@@ -109,6 +109,8 @@ cd backend && go run .
 #    - 输出 ui/dist/
 #    - vite.shared.js 的 build-script 插件会在 closeBundle 阶段
 #      把 speedtest/speedtest_worker.js 拷贝到 dist/speedtest_worker.js
+#    - ui/speedtest 是 LibreSpeed 的 Git 子模块，当前锁定 v6.3.1；
+#      首次克隆需加 --recursive（见 1.2），子模块缺失时构建会直接报错
 cd ui
 npm ci
 npm run build
@@ -121,8 +123,12 @@ cp -r dist/. ../backend/embed/ui/
 
 # 3. 构建后端 (Go embed 编译期把 backend/embed/ui/ 打包进二进制)
 cd ../backend
-go build -o als
+go build -o als.bin
 ```
+
+> **为什么输出 `als.bin`**：`backend/` 下已存在同名的 `als/` 源码目录，`go build -o als` 会因
+> 输出路径与目录冲突而失败。CI 使用的是 `go build -v ./...`（不指定输出名），
+> Dockerfile 则在 `/app/als/` 目录下构建并输出 `/app/als/als`，都不存在该冲突。
 
 **构建行为契约（与代码一致）**:
 
@@ -173,7 +179,7 @@ go test ./...
 ```bash
 go test -race -coverprofile=coverage.out -covermode=atomic ./...
 go tool cover -func=coverage.out | tail -3
-# 应当 >= 52%（CI 阈值；2026-06-23 实测 ~53.6%）
+# 应当 >= 52%（CI 阈值；当前实测值以 CI 输出为准）
 ```
 
 **特定包测试**:
@@ -225,7 +231,7 @@ npm run test:e2e
 
 ### 3.4 后端关键设计原则（不可破坏）
 
-下列不变量在 2026-06-23 的 `260623-fix-session-config-disclosure` 分支中固化，违反任意一项都会让真实生产 bug 回归：
+下列不变量由 PR #143 / #144 / #145 / #146（2026-06-23 合并）固化，违反任意一项都会让真实生产 bug 回归：
 
 **1. SSE `Config` 事件只下发 `ClientConfig` DTO**
    `backend/als/controller/session/session.go::buildClientConfig` 把 `*ALSConfig` 中**客户端需要的字段**投影到 `ClientConfig`。**绝不可**直接把 `*ALSConfig` 嵌入序列化结构体——会泄露 `listen_host`/`listen_port`/`iperf3_*_port` 等内部运维信息给任意持有 session id 的客户端。
@@ -347,8 +353,8 @@ ws.onerror = (e) => console.error('Error:', e);
 # 连接到 Shell
 wscat -c ws://localhost/session/<session-id>/shell
 
-# 发送 help 命令
-1help
+# 发送 ping 命令（help 已被隐藏的 no-help 占位命令替换，不可用）
+1ping 8.8.8.8
 ```
 
 **假 Shell 独立测试**:
@@ -357,11 +363,14 @@ cd backend
 go run . --shell
 ```
 
-**启用假 Shell 调试模式**:
-```bash
-# 修改 fakeshell/main.go
-util.SetDebug(true)  # 启用调试输出
+**假 Shell 的日志行为**:
+```go
+// backend/main.go
+config.IsInternalCall = true   // 跳过 "Loading config from environment variables..." 日志
 ```
+
+> 仓库中**没有** `util.SetDebug()` 之类的调试开关——`backend/fakeshell/` 下只有 `main.go` / `menu.go` /
+> `prompt.go` / `commands/`，且 `main.go` 未导入 `util` 包。需要更多输出时直接观察标准输出即可。
 
 ## 6. 代码规范
 
@@ -423,7 +432,7 @@ als/
 ├── backend/
 │   ├── main.go              # 入口
 │   ├── als/                 # 核心模块
-│   ├   ├── route.go         # 路由配置
+│   │   ├── route.go         # 路由配置
 │   │   └── controller/      # 控制器
 │   ├── config/              # 配置
 │   └── fakeshell/           # Shell 实现
@@ -432,6 +441,7 @@ als/
 │   │   ├── components/      # Vue 组件
 │   │   ├── config/          # 配置
 │   │   └── locales/         # 国际化
+│   ├── speedtest/           # LibreSpeed 子模块 (v6.3.1)
 │   └── public/
 ├── scripts/                 # 脚本
 └── .github/                 # GitHub Actions
@@ -492,7 +502,7 @@ Closes #123
 例如：2.1.0
 ```
 
-**打标签**:
+**打标签**（以下为**示例**，当前最新 release tag 为 `v2.7.2`）:
 ```bash
 git tag -a v2.1.0 -m "Release v2.1.0"
 git push origin v2.1.0
@@ -500,16 +510,15 @@ git push origin v2.1.0
 
 ### 8.2 发布步骤
 
-1. **更新版本号**:
+1. **更新版本号**（以下为**示例**，当前最新 release tag 为 `v2.7.2`）:
    ```bash
    # ui/package.json
    "version": "2.1.0"
    ```
 
-2. **更新 CHANGELOG**:
-   - 记录新增功能
-   - 记录修复问题
-   - 记录变更
+2. **更新变更记录**:
+   - 仓库当前**没有** `CHANGELOG.md`（`git ls-files` 无此文件）
+   - 若后续引入 CHANGELOG，请在本节补充其文件位置与更新约定
 
 3. **运行测试**:
    ```bash
@@ -517,7 +526,7 @@ git push origin v2.1.0
    cd ui && npm run lint && npm run build
    ```
 
-4. **打 Tag 并推送**:
+4. **打 Tag 并推送**（以下为**示例**，当前最新 release tag 为 `v2.7.2`）:
    ```bash
    git tag -a v2.1.0 -m "Release v2.1.0"
    git push origin v2.1.0
@@ -574,7 +583,7 @@ docker build --no-cache -t als:local .
 
 ### 9.2 Debug Checklist
 
-- [ ] Go 版本 ≥ 1.26
+- [ ] Go 版本 ≥ 1.26.9
 - [ ] Node.js 版本 ≥ 22
 - [ ] 前端已构建 (`ui/dist/` 存在)
 - [ ] 依赖已安装 (`go mod tidy` 已完成)

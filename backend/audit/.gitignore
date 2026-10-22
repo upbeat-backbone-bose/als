@@ -8,3 +8,10 @@
 gocache/
 gomodcache/
 gotmpdir/
+
+# Audit reports and helper scripts produced by the audit tooling.
+# Only SPEC.md and EVIDENCE.md are checked in.
+*.md
+!EVIDENCE.md
+!SPEC.md
+*.js

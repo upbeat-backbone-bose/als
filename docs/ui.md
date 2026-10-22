@@ -2,7 +2,7 @@
 
 **模块路径**: `ui/`
 
-**最后更新**: 2026-06-23
+**最后更新**: 2026-10-22
 <!-- 同步来源: ui/ 模块代码（vite.config.js / vite.shared.js / vitest.config.js / eslint.config.js / package.json）-->
 
 ## 1. 模块概述
@@ -40,12 +40,19 @@ ui/
 │   │   ├── Copy.vue             # 复制按钮
 │   │   ├── __tests__/           # 组件测试
 │   │   │   ├── Copy.test.js
-│   │   │   └── Loading.test.js
+│   │   │   ├── Loading.test.js
+│   │   │   └── Speedtest.test.js
 │   │   └── Utilities/           # 工具子组件
 │   │       ├── Ping.vue         # Ping 工具
 │   │       ├── IPerf3.vue       # iPerf3 工具
 │   │       ├── Shell.vue        # Shell 终端
-│   │       └── SpeedtestNet.vue # Speedtest.net
+│   │       ├── SpeedtestNet.vue # Speedtest.net
+│   │       └── __tests__/       # 工具子组件测试
+│   │           ├── IPerf3.test.js
+│   │           ├── Ping.test.js
+│   │           └── SpeedtestNet.test.js
+│   ├── __tests__/               # 根组件测试
+│   │   └── App.test.js
 │   ├── assets/
 │   │   └── base.css             # Tailwind v4 入口样式
 │   ├── config/
@@ -71,9 +78,14 @@ ui/
 │   ├── App.vue                  # 根组件
 │   └── main.js                  # 入口文件
 ├── public/
-│   └── speedtest_worker.js      # 测速 Web Worker
-├── speedtest/                   # LibreSpeed 子模块 (独立)
+│   ├── favicon.ico              # 站点图标
+│   └── speedtest_worker.js      # 测速 Web Worker 占位（真实 worker 见 speedtest/ 子模块）
+├── speedtest/                   # LibreSpeed 子模块 (独立，当前锁定 v6.3.1)
+├── index.html                   # Vite 入口 HTML
+├── jsconfig.json                # JS 路径别名配置
 ├── package.json
+├── package-lock.json            # 依赖锁文件
+├── .prettierrc.json             # Prettier 配置
 ├── vite.config.js               # Vite 配置 (使用 vite.shared.js)
 ├── vite.shared.js               # 共享 Vite 插件 (vue/tailwindcss/auto-import/components)
 ├── vitest.config.js             # Vitest 配置
@@ -83,51 +95,75 @@ ui/
 
 ### 2.2 技术栈
 
-**依赖管理**:
+**依赖管理**（**节选，以 `ui/package.json` 为准**）:
 ```json
 {
   "dependencies": {
-    "@tailwindcss/vite": "^4.3.1",
-    "pinia": "^3.0.4",
-    "tailwindcss": "^4.3.1",
-    "vue": "^3.5.38"
+    "@tailwindcss/vite": "^4.3.3",
+    "pinia": "^4.0.3",
+    "tailwindcss": "^4.3.3",
+    "vue": "^3.5.44"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.9",
+    "minimatch": "^10.2.5",
+    "@eslint/eslintrc": {
+      "minimatch": "^10.2.5"
+    },
+    "markdown-it": "^14.3.3",
+    "js-yaml": "^4.3.2"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.7",
-    "@xterm/xterm": "^6.0.0",
+    "@eslint/eslintrc": "^3.3.7",
+    "@eslint/js": "^10.0.1",
+    "@rushstack/eslint-patch": "^1.16.1",
+    "@vicons/carbon": "^0.13.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vitejs/plugin-vue-jsx": "^5.1.6",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/test-utils": "^2.5.1",
     "@xterm/addon-attach": "^0.12.0",
     "@xterm/addon-fit": "^0.11.0",
-    "apexcharts": "^5.15.2",
-    "axios": "^1.18.0",
-    "naive-ui": "^2.44.1",
-    "vue-i18n": "^11.4.6",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/xterm": "^6.0.0",
+    "apexcharts": "^7.8.0",
+    "axios": "^1.20.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-vue": "^10.11.1",
+    "jsdom": "^30.1.3",
+    "naive-ui": "^2.45.3",
+    "prettier": "^3.9.9",
+    "unplugin-auto-import": "^21.1.0",
+    "unplugin-vue-components": "^32.1.0",
+    "v-clipboard": "3.0.0-next.1",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-i18n": "^11.4.14",
     "vue3-apexcharts": "^1.11.1",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.9",
-    "@vue/test-utils": "^2.4.11",
-    "jsdom": "^29.1.1",
-    "unplugin-auto-import": "^21.0.0",
-    "unplugin-vue-components": "^32.1.0"
+    "vue3-markdown-it": "^1.0.10"
   }
 }
 ```
+
+> `overrides` 用于锁定存在安全公告的传递依赖版本（`markdown-it` / `brace-expansion` / `minimatch` / `js-yaml`），改动时请一并复核。
 
 **核心库说明**:
 
 | 库 | 用途 | 版本 |
 |------|------|------|
-| Vue 3 | 核心框架 | 3.5.38+ |
-| Pinia | 状态管理 | 3.0.4+ |
-| Vite | 构建工具 | 8.0.16+ |
-| Tailwind CSS | 样式框架 | 4.3.1+ |
-| @tailwindcss/vite | Tailwind Vite 插件 | 4.3.1+ |
-| Naive UI | UI 组件库 | 2.44.1+ |
-| Vue I18n | 国际化 | 11.4.6+ |
+| Vue 3 | 核心框架 | 3.5.44+ |
+| Pinia | 状态管理 | 4.0.3+ |
+| Vite | 构建工具 | 8.3.4+ |
+| Tailwind CSS | 样式框架 | 4.3.3+ |
+| @tailwindcss/vite | Tailwind Vite 插件 | 4.3.3+ |
+| Naive UI | UI 组件库 | 2.45.3+ |
+| Vue I18n | 国际化 | 11.4.14+ |
 | Xterm.js | 终端模拟 | 6.0.0+ |
-| ApexCharts | 图表库 | 5.15.2+ |
-| Axios | HTTP 客户端 | 1.18.0+ |
-| Vitest | 单元测试 | 4.1.9+ |
-| @vue/test-utils | Vue 组件测试 | 2.4.11+ |
+| ApexCharts | 图表库 | 7.8.0+ |
+| Axios | HTTP 客户端 | 1.20.0+ |
+| Vitest | 单元测试 | 5.0.3+ |
+| @vue/test-utils | Vue 组件测试 | 2.5.1+ |
 
 ## 3. 构建配置
 
@@ -257,7 +293,7 @@ npm run dev
 
 **输出**:
 ```
-VITE v8.0.16  ready in 1234 ms
+VITE v8.3.4  ready in 1234 ms
 
 ➜  Local:   http://localhost:5173/
 ➜  Network: use --host to expose
@@ -1125,8 +1161,7 @@ import { defineAsyncComponent } from 'vue'
 
 const ShellComponent = defineAsyncComponent({
   loader: () => import('./Utilities/Shell.vue'),
-  delay: 200,
-  timeout: 3000
+  delay: 200
 })
 ```
 
@@ -1194,7 +1229,7 @@ largeData.value = newData
 - 避免命名冲突
 - 编译时优化
 
-### 11.2 CSS 变量
+### 11.3 CSS 变量
 
 ```vue
 <style scoped>
@@ -1207,7 +1242,7 @@ largeData.value = newData
 
 **说明**: 使用 Naive UI 的 CSS 变量，支持主题切换
 
-### 11.3 响应式设计
+### 11.4 响应式设计
 
 ```vue
 <style scoped>
@@ -1228,32 +1263,50 @@ largeData.value = newData
 
 ### 12.1 ESLint 配置
 
-**文件**: `ui/.eslintrc.cjs`
+**文件**: `ui/eslint.config.js`（ESLint 10 flat config）
 
 ```javascript
-module.exports = {
-  extends: [
-    'plugin:vue/vue3-recommended',
-    'prettier'
-  ],
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module'
+import js from '@eslint/js'
+import vue from 'eslint-plugin-vue'
+
+export default [
+  {
+    ignores: ['dist/**', 'speedtest/**', 'public/speedtest_worker.js', '.eslintrc.cjs']
+  },
+  js.configs.recommended,
+  ...vue.configs['flat/essential'],
+  {
+    files: ['**/*.{js,cjs,mjs,jsx,vue}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module'
+    },
+    rules: {
+      'no-undef': 'off',
+      'no-empty': 'off',
+      'no-unused-vars': 'warn',
+      'no-prototype-builtins': 'off',
+      'vue/multi-word-component-names': 'off',
+      'vue/no-side-effects-in-computed-properties': 'off',
+      'vue/require-v-for-key': 'off',
+      'vue/valid-v-for': 'off'
+    }
   }
-}
+]
 ```
 
 ### 12.2 Prettier 配置
 
-**文件**: `ui/.prettierrc`
+**文件**: `ui/.prettierrc.json`
 
 ```json
 {
+  "$schema": "https://json.schemastore.org/prettierrc",
   "semi": false,
+  "tabWidth": 2,
   "singleQuote": true,
-  "trailingComma": "none",
-  "printWidth": 80,
-  "tabWidth": 2
+  "printWidth": 100,
+  "trailingComma": "none"
 }
 ```
 
@@ -1297,12 +1350,17 @@ npm run test:watch
 
 **测试框架**: Vitest + @vue/test-utils + jsdom
 
-**测试文件**:
+**测试文件**（共 10 个）:
+- `src/__tests__/App.test.js` — 根组件渲染
 - `src/helper/unit.test.js` — formatBytes 工具函数
 - `src/config/lang.test.js` — 多语言配置验证
 - `src/stores/__tests__/app.test.js` — Pinia Store 状态
 - `src/components/__tests__/Copy.test.js` — Copy 组件渲染
 - `src/components/__tests__/Loading.test.js` — Loading 组件渲染
+- `src/components/__tests__/Speedtest.test.js` — Speedtest 组件渲染
+- `src/components/Utilities/__tests__/IPerf3.test.js` — IPerf3 工具组件
+- `src/components/Utilities/__tests__/Ping.test.js` — Ping 工具组件
+- `src/components/Utilities/__tests__/SpeedtestNet.test.js` — Speedtest.net 工具组件
 
 ### 13.3 手动测试清单
 
@@ -1393,9 +1451,13 @@ subFs, _ := fs.Sub(uiFs, "ui")
 httpFs := http.FileServer(http.FS(subFs))
 ```
 
-### 15.3 CDN 部署
+### 15.3 CDN 部署（未落地的可选方案）
 
-**配置**:
+> 以下配置**当前未在仓库中启用**：`ui/vite.config.js` 全文 25 行，只有 `base: './'`、`server.proxy`、
+> `resolve.alias` 与 `plugins`，**没有 `build` 段**。此处仅作为「需要按 CDN 路径部署时如何改造」的参考，
+> 照抄不会生效。
+
+**参考配置**:
 
 ```javascript
 build: {

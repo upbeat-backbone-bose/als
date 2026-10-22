@@ -2,7 +2,7 @@
 
 **模块路径**: `backend/config/`
 
-**最后更新**: 2026-04-22
+**最后更新**: 2026-10-22
 
 ## 1. 模块概述
 
@@ -74,14 +74,21 @@ var IsInternalCall bool
 ### 3.1 主流程
 
 ```go
-func LoadWebConfig() {
-    // 1. 加载默认配置 + 环境变量
+// backend/config/init.go:69-73
+func Load() {
+    // default config
     Config = GetDefaultConfig()
     LoadFromEnv()
-    
+}
+
+// backend/config/init.go:75-95
+func LoadWebConfig() {
+    // 1. 加载默认配置 + 环境变量
+    Load()
+
     // 2. 加载赞助商消息
     LoadSponsorMessage()
-    
+
     // 3. 输出日志
     log.Default().Println("Loading config for web services...")
 
@@ -103,6 +110,9 @@ func LoadWebConfig() {
     }
 }
 ```
+
+> `Load()` 是独立函数（`GetDefaultConfig()` + `LoadFromEnv()`），由 `LoadWebConfig()` 调用。
+> `--shell` 模式只调用 `Load()`，**不加载赞助商消息**、也不做 iperf3 探测与公网 IP 获取。
 
 **流程图**:
 ```
@@ -128,7 +138,7 @@ func GetDefaultConfig() *ALSConfig {
         Iperf3StartPort: 30000,
         Iperf3EndPort:   31000,
 
-        SpeedtestFileList: []string{"1MB", "10MB", "100MB", "1GB"},
+        SpeedtestFileList: []string{"1MB", "10MB", "100MB", "1GB", "100GB"},
         PublicIPv4:        "",
         PublicIPv6:        "",
 
@@ -187,6 +197,8 @@ func LoadFromEnv() {
         "UTILITIES_FAKESHELL":       &Config.FeatureShell,
         "UTILITIES_IPERF3":          &Config.FeatureIperf3,
         "UTILITIES_MTR":             &Config.FeatureMTR,
+        "UTILITIES_FILESPEEDTEST":   &Config.FeatureFileSpeedtest,
+        "UTILITIES_TRACEROUTE":      &Config.FeatureTraceroute,
     }
 
     // 解析字符串
@@ -236,7 +248,7 @@ func LoadFromEnv() {
 | `LOCATION` | string | (自动获取) | 服务器位置描述 |
 | `PUBLIC_IPV4` | string | (自动获取) | 公网 IPv4 地址 |
 | `PUBLIC_IPV6` | string | (自动获取) | 公网 IPv6 地址 |
-| `SPEEDTEST_FILE_LIST` | string | "1MB 10MB 100MB 1GB" | 测速文件大小列表 |
+| `SPEEDTEST_FILE_LIST` | string | "1MB 10MB 100MB 1GB 100GB" | 测速文件大小列表 |
 | `SPONSOR_MESSAGE` | string | "" | 赞助商消息 |
 | `DISPLAY_TRAFFIC` | bool | true | 网卡流量显示开关 |
 | `ENABLE_SPEEDTEST` | bool | true | LibreSpeed 开关 |
@@ -247,6 +259,7 @@ func LoadFromEnv() {
 | `UTILITIES_IPERF3_PORT_MIN` | int | 30000 | iPerf3 起始端口 |
 | `UTILITIES_IPERF3_PORT_MAX` | int | 31000 | iPerf3 结束端口 |
 | `UTILITIES_MTR` | bool | true | MTR 开关 |
+| `UTILITIES_FILESPEEDTEST` | bool | true | 文件测速开关 |
 | `UTILITIES_TRACEROUTE` | bool | true | Traceroute 开关 |
 
 **注意**: 
