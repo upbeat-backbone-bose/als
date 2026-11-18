@@ -117,9 +117,27 @@ jobs:
         # to the release tag instead of master: the master branch
         # script still carries a broken `openssl -dst openssl dgst`
         # fallback that fails checksum verification.
+        #
+        # The script downloads a release asset from GitHub, and that
+        # download intermittently answers 504/5xx and aborts the whole
+        # job before the linter ever runs (seen on PR #291). Retry the
+        # install a few times before giving up.
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v2.15.0/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" v2.15.0
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if curl -sSfL --retry 3 --retry-delay 5 \
+                https://raw.githubusercontent.com/golangci/golangci-lint/v2.15.0/install.sh \
+                | sh -s -- -b "$(go env GOPATH)/bin" v2.15.0; then
+              echo "golangci-lint v2.15.0 installed on attempt ${attempt}"
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::golangci-lint install attempt ${attempt} failed, retrying in 10s"
+              sleep 10
+            fi
+          done
+          echo "::error::failed to install golangci-lint v2.15.0 after 3 attempts"
+          exit 1
       - name: gofmt check
         # Fail if any .go file is not gofmt-clean.
         run: |
