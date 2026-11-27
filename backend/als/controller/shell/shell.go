@@ -136,6 +136,15 @@ func checkOrigin(r *http.Request) bool {
 		return false
 	}
 
+	// Reject non-network schemes explicitly. The current policy is
+	// "same host" (after port stripping), but http(s) is the only
+	// scheme that makes sense for a WebSocket Origin. file:// and
+	// data:// match a host string in url.Parse and would otherwise
+	// pass the allow-list check.
+	if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "ws" && u.Scheme != "wss" {
+		return false
+	}
+
 	originHost := stripPort(u.Host)
 	if originHost == "" {
 		return false
