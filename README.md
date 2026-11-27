@@ -58,6 +58,7 @@ docker run -d \
 | UTILITIES_IPERF3_PORT_MIN | 30000                                                                | 30000                                                      | iperf3 listen port range - from                                                         |
 | UTILITIES_IPERF3_PORT_MAX | 31000                                                               | 31000                                                      | iperf3 listen port range - to                                                           |
 | SPONSOR_MESSAGE           | "Test message" or "/tmp/als_readme.md" or "http://some_host/114514.md" | ''                                                         | Show server sponsor message (support markdown file, required mapping file to container) |
+| ALLOWED_ORIGINS           | als.example.com,monitor.example.com                                  | (PUBLIC_IPV4 + PUBLIC_IPV6 + LISTEN_IP)                   | WebSocket Origin allow-list (comma-separated) for CSWSH protection on the fake-shell endpoint. An empty list rejects every WebSocket upgrade |
 
 ## Features
 - [x] HTML 5 Speed Test

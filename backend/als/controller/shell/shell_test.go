@@ -7,67 +7,190 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samlm0/als/v2/config"
 )
 
-// TestCheckOriginCurrentBehavior documents the present (buggy) policy so
-// any tightening shows up as a deliberate test change.
+// TestCheckOriginAllowList exercises the post-fix policy:
+//  1. Empty Origin is rejected (browsers always send one; a missing
+//     Origin means a non-browser client and is not a trust signal).
+//  2. Cross-origin / foreign hosts are rejected.
+//  3. Host-header smuggling no longer matters: r.Host is never compared
+//     against Origin.
+//  4. Hosts on the allow-list (port-stripped, case-insensitive) pass.
 //
-// TODO(security): the current policy is unsafe for public deployments:
-//  1. Empty Origin is accepted (lets curl / native apps in, but also
-//     bypasses CSWSH defense since the browser sends Origin).
-//  2. Same-host comparison trusts r.Host, which can be overridden by
-//     Host-header smuggling or a misconfigured reverse proxy.
+// If the allow-list is empty, every upgrade is rejected -- this is the
+// safe default.
 //
-// These cases are kept as-is on purpose. When the policy is replaced with
-// an explicit allow-list, flip the wantAllow values and the next run of
-// this test will surface every regression.
-func TestCheckOriginCurrentBehavior(t *testing.T) {
-	t.Parallel()
+// NOTE: this test (and the URL-rejection test below) intentionally does
+// not call t.Parallel. Both mutate the package-level allowedOrigins
+// slice via setAllowedOriginsForTest, which would race under parallel
+// execution. TestBuildAllowedOrigins and TestStripPort use only pure
+// functions and can still run in parallel.
+func TestCheckOriginAllowList(t *testing.T) {
 
 	tests := []struct {
-		name      string
-		host      string
-		origin    string
-		wantAllow bool
+		name        string
+		allowed     []string
+		host        string
+		origin      string
+		wantAllow   bool
+		description string
 	}{
-		// Empty origin (e.g. curl, native app, no Origin header at all).
-		{name: "empty origin is allowed", host: "als.example.com", origin: "", wantAllow: true},
+		// --- Reject empty / malformed / cross-origin ---
+		{
+			name:        "empty origin rejected",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "",
+			wantAllow:   false,
+			description: "missing Origin is the canonical CSWSH bypass signal",
+		},
+		{
+			name:        "different host rejected",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "https://evil.com",
+			wantAllow:   false,
+			description: "foreign origin must never be accepted",
+		},
+		{
+			name:        "subdomain rejected",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "https://api.als.example.com",
+			wantAllow:   false,
+			description: "subdomain is not a free pass: must be on the list",
+		},
+		{
+			name:        "malformed origin rejected",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "ht!tp://als.example.com",
+			wantAllow:   false,
+			description: "garbage Origin must not match",
+		},
+		{
+			name:        "file scheme rejected",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "file://als.example.com",
+			wantAllow:   false,
+			description: "file:// is not http(s); must not be accepted",
+		},
+		{
+			name:        "data scheme rejected",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "data:text/html,hello",
+			wantAllow:   false,
+			description: "non-network schemes must not be accepted",
+		},
 
-		// Same host with default port handling: u.Host is "als.example.com"
-		// for both http and https.
-		{name: "same host http", host: "als.example.com", origin: "http://als.example.com", wantAllow: true},
-		{name: "same host https", host: "als.example.com", origin: "https://als.example.com", wantAllow: true},
-		{name: "same host case-insensitive", host: "ALS.example.com", origin: "https://als.example.com", wantAllow: true},
-		{name: "origin scheme dropped", host: "als.example.com", origin: "https://als.example.com", wantAllow: true},
+		// --- Host-header smuggling is no longer relevant ---
+		{
+			name:        "host header mismatch does not bypass allowlist",
+			allowed:     []string{"als.example.com"},
+			host:        "evil.com",
+			origin:      "https://als.example.com",
+			wantAllow:   true,
+			description: "if Origin is on the allow-list, accept regardless of Host header",
+		},
+		{
+			name:        "host header match with foreign origin still rejected",
+			allowed:     []string{"als.example.com"},
+			host:        "evil.com",
+			origin:      "https://evil.com",
+			wantAllow:   false,
+			description: "the old behavior trusted r.Host; the new policy ignores it",
+		},
 
-		// Different host.
-		{name: "different host rejected", host: "als.example.com", origin: "https://evil.com", wantAllow: false},
-		{name: "subdomain rejected", host: "als.example.com", origin: "https://api.als.example.com", wantAllow: false},
-		{name: "case-insensitive host comparison", host: "als.example.com", origin: "https://ALS.example.com", wantAllow: true},
+		// --- Allow-list matching ---
+		{
+			name:        "same host allowed",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "https://als.example.com",
+			wantAllow:   true,
+			description: "origin on the list passes",
+		},
+		{
+			name:        "case-insensitive origin allowed",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "https://ALS.EXAMPLE.COM",
+			wantAllow:   true,
+			description: "host matching is case-insensitive",
+		},
+		{
+			name:        "port-stripped matching",
+			allowed:     []string{"als.example.com"},
+			host:        "als.example.com",
+			origin:      "https://als.example.com:8443",
+			wantAllow:   true,
+			description: "Origin port does not have to match the configured entry",
+		},
+		{
+			name:        "configured port matches any origin port",
+			allowed:     []string{"als.example.com:8080"},
+			host:        "als.example.com:8080",
+			origin:      "https://als.example.com:9090",
+			wantAllow:   true,
+			description: "port is stripped before comparison; both entries match",
+		},
+		{
+			name:        "ipv6 literal on allowlist matches bracketed origin",
+			allowed:     []string{"[2001:db8::1]"},
+			host:        "[2001:db8::1]",
+			origin:      "https://[2001:db8::1]:8443",
+			wantAllow:   true,
+			description: "IPv6 literals with brackets are normalised",
+		},
+		{
+			name:        "ipv6 host on allowlist rejects ipv4 origin",
+			allowed:     []string{"2001:db8::1"},
+			host:        "als.example.com",
+			origin:      "https://1.2.3.4",
+			wantAllow:   false,
+			description: "v6 and v4 are distinct hosts",
+		},
 
-		// Host header smuggling scenarios: the comparison trusts r.Host,
-		// which an attacker can set to match Origin via a misbehaving proxy.
-		{name: "host header smuggle matches origin", host: "evil.com", origin: "https://evil.com", wantAllow: true},
+		// --- Multiple entries ---
+		{
+			name:        "second entry on list accepted",
+			allowed:     []string{"primary.example.com", "backup.example.com"},
+			host:        "primary.example.com",
+			origin:      "https://backup.example.com",
+			wantAllow:   true,
+			description: "any one match is enough",
+		},
 
-		// Malformed Origin URL.
-		{name: "malformed origin rejected", host: "als.example.com", origin: "ht!tp://als.example.com", wantAllow: false},
-
-		// Port differences.
-		{name: "port mismatch rejected", host: "als.example.com:8080", origin: "https://als.example.com:9090", wantAllow: false},
-		{name: "default port 443 vs explicit", host: "als.example.com", origin: "https://als.example.com:443", wantAllow: false},
-
-		// File / data schemes: url.Host is the part after "//", so a
-		// file:// scheme with a matching hostname matches the Host header.
-		// This is intentional in the current buggy implementation -- it
-		// is exactly the kind of edge case the allow-list replacement
-		// must lock down.
-		{name: "file scheme with matching host allowed", host: "als.example.com", origin: "file://als.example.com", wantAllow: true},
-		{name: "file scheme with different host rejected", host: "als.example.com", origin: "file://evil.com", wantAllow: false},
+		// --- Empty allow-list is the safe default ---
+		{
+			name:        "empty allowlist rejects everything",
+			allowed:     nil,
+			host:        "als.example.com",
+			origin:      "https://als.example.com",
+			wantAllow:   false,
+			description: "no opt-in means no shell",
+		},
+		{
+			name:        "empty-string entries are ignored",
+			allowed:     []string{"", "  ", "als.example.com"},
+			host:        "als.example.com",
+			origin:      "https://als.example.com",
+			wantAllow:   true,
+			description: "whitespace/empty entries do not match anything",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			// NOTE: deliberately NOT calling t.Parallel here. The shared
+			// package-level allowedOrigins slice is mutated per case via
+			// setAllowedOriginsForTest, and parallelism would race on
+			// both the slice and the cleanup ordering.
+			cleanup := setAllowedOriginsForTest(tt.allowed)
+			defer cleanup()
 
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.Host = tt.host
@@ -77,8 +200,8 @@ func TestCheckOriginCurrentBehavior(t *testing.T) {
 
 			got := checkOrigin(req)
 			if got != tt.wantAllow {
-				t.Errorf("checkOrigin(host=%q, origin=%q) = %v; want %v",
-					tt.host, tt.origin, got, tt.wantAllow)
+				t.Errorf("checkOrigin(host=%q, origin=%q, allowed=%v) = %v; want %v (%s)",
+					tt.host, tt.origin, tt.allowed, got, tt.wantAllow, tt.description)
 			}
 		})
 	}
@@ -90,6 +213,9 @@ func TestUpgraderUsesCheckOrigin(t *testing.T) {
 	if upgrader.CheckOrigin == nil {
 		t.Fatal("upgrader.CheckOrigin must not be nil")
 	}
+
+	cleanup := setAllowedOriginsForTest([]string{"als.example.com"})
+	defer cleanup()
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Host = "als.example.com"
@@ -105,10 +231,15 @@ func TestUpgraderUsesCheckOrigin(t *testing.T) {
 }
 
 // TestCheckOriginReturnsFalseOnInvalidURL is a focused regression test:
-// if url.Parse fails, checkOrigin must return false (never true). This
-// guards against a future refactor accidentally widening the policy.
+// if url.Parse fails or returns no host, checkOrigin must return false
+// (never true). This guards against a future refactor accidentally
+// widening the policy.
+//
+// Sequential -- shares the allowedOrigins allow-list with the policy
+// table tests above.
 func TestCheckOriginReturnsFalseOnInvalidURL(t *testing.T) {
-	t.Parallel()
+	cleanup := setAllowedOriginsForTest([]string{"als.example.com"})
+	defer cleanup()
 
 	tests := []string{
 		// Control characters that url.Parse rejects.
@@ -119,8 +250,8 @@ func TestCheckOriginReturnsFalseOnInvalidURL(t *testing.T) {
 
 	for _, origin := range tests {
 		t.Run(strings.ReplaceAll(origin, "\x00", "_NUL_"), func(t *testing.T) {
-			t.Parallel()
-
+			// Sequential on purpose: shares setAllowedOriginsForTest with
+			// the table tests above.
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.Host = "als.example.com"
 			req.Header.Set("Origin", origin)
@@ -132,10 +263,6 @@ func TestCheckOriginReturnsFalseOnInvalidURL(t *testing.T) {
 	}
 }
 
-// TestHandleNewShellMissingSession covers the 500 path when no
-// clientSession is set on the gin context. Previously the handler
-// would have nil-pointer-dereferenced on the unchecked type
-// assertion v.(*client.ClientSession).
 func TestHandleNewShellMissingSession(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -166,35 +293,123 @@ func TestUpgraderBufferSizes(t *testing.T) {
 	}
 }
 
-func TestCheckOriginLocalhost(t *testing.T) {
+func TestBuildAllowedOrigins(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		host      string
-		origin    string
-		wantAllow bool
+		name string
+		cfg  *config.ALSConfig
+		want []string
 	}{
-		{name: "localhost same port", host: "localhost:8080", origin: "http://localhost:8080", wantAllow: true},
-		{name: "127.0.0.1 same", host: "127.0.0.1:8080", origin: "http://127.0.0.1:8080", wantAllow: true},
-		{name: "localhost vs 127.0.0.1 rejected", host: "localhost:8080", origin: "http://127.0.0.1:8080", wantAllow: false},
+		{
+			name: "public addresses only",
+			cfg: &config.ALSConfig{
+				PublicIPv4:     "1.2.3.4",
+				PublicIPv6:     "2001:db8::1",
+				ListenHost:     "0.0.0.0",
+				AllowedOrigins: nil,
+			},
+			want: []string{"1.2.3.4", "2001:db8::1", "0.0.0.0"},
+		},
+		{
+			name: "case-normalised",
+			cfg: &config.ALSConfig{
+				PublicIPv4:     "ALS.Example.COM",
+				AllowedOrigins: []string{"API.EXAMPLE.COM"},
+			},
+			want: []string{"als.example.com", "api.example.com"},
+		},
+		{
+			name: "empty/whitespace entries dropped",
+			cfg: &config.ALSConfig{
+				PublicIPv4:     "  ",
+				AllowedOrigins: []string{"", "  ", "real.example.com"},
+			},
+			want: []string{"real.example.com"},
+		},
+		{
+			name: "duplicates collapsed",
+			cfg: &config.ALSConfig{
+				PublicIPv4:     "1.2.3.4",
+				AllowedOrigins: []string{"1.2.3.4", "1.2.3.4:8080"},
+			},
+			// 1.2.3.4 normalised before "1.2.3.4:8080" -> both kept
+			// because port-stripping happens at comparison time, not here.
+			want: []string{"1.2.3.4", "1.2.3.4:8080"},
+		},
+		{
+			name: "empty config yields empty list",
+			cfg:  &config.ALSConfig{},
+			want: nil,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			req.Host = tt.host
-			if tt.origin != "" {
-				req.Header.Set("Origin", tt.origin)
-			}
-
-			got := checkOrigin(req)
-			if got != tt.wantAllow {
-				t.Errorf("checkOrigin(host=%q, origin=%q) = %v; want %v",
-					tt.host, tt.origin, got, tt.wantAllow)
+			got := buildAllowedOrigins(tt.cfg)
+			if !equalSlices(got, tt.want) {
+				t.Errorf("buildAllowedOrigins() = %v; want %v", got, tt.want)
 			}
 		})
 	}
+}
+
+func TestStripPort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		host string
+		want string
+	}{
+		{"als.example.com", "als.example.com"},
+		{"als.example.com:8080", "als.example.com"},
+		{"ALS.Example.COM", "als.example.com"},
+		{"[2001:db8::1]", "[2001:db8::1]"},
+		{"[2001:db8::1]:8443", "[2001:db8::1]"},
+		{"", ""},
+		{"   ", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			t.Parallel()
+			got := stripPort(tt.host)
+			if got != tt.want {
+				t.Errorf("stripPort(%q) = %q; want %q", tt.host, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAllowedOriginsSnapshotIsCopy(t *testing.T) {
+	// Sequential on purpose: mutates the package-level allowedOrigins
+	// slice via setAllowedOriginsForTest.
+	cleanup := setAllowedOriginsForTest([]string{"a.example.com", "b.example.com"})
+	defer cleanup()
+
+	snap := AllowedOriginsSnapshot()
+	snap[0] = "tampered.example.com"
+
+	// Re-reading the snapshot must not show the tampered value.
+	again := AllowedOriginsSnapshot()
+	if again[0] != "a.example.com" {
+		t.Errorf("snapshot was not a copy: got %q after external mutation", again[0])
+	}
+}
+
+// equalSlices compares two string slices for unordered equality.
+// Order is significant here because buildAllowedOrigins preserves the
+// precedence (PublicIPv4 -> PublicIPv6 -> ListenHost -> AllowedOrigins).
+func equalSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -29,6 +29,12 @@ type ALSConfig struct {
 
 	SponsorMessage string `json:"sponsor_message"`
 
+	// AllowedOrigins is the explicit allow-list for WebSocket Origin
+	// validation on the fake-shell endpoint. If empty, the shell
+	// feature is effectively disabled: every WebSocket upgrade is
+	// rejected because no Origin is on the list.
+	AllowedOrigins []string `json:"-"`
+
 	FeaturePing            bool `json:"feature_ping"`
 	FeatureShell           bool `json:"feature_shell"`
 	FeatureLibrespeed      bool `json:"feature_librespeed"`

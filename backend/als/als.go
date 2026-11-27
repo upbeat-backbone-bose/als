@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/samlm0/als/v2/als/client"
+	"github.com/samlm0/als/v2/als/controller/shell"
 	"github.com/samlm0/als/v2/als/timer"
 	"github.com/samlm0/als/v2/config"
 	alsHttp "github.com/samlm0/als/v2/http"
@@ -26,6 +27,18 @@ func Init() {
 
 	log.Default().Println("Listen on: " + config.Config.ListenHost + ":" + config.Config.ListenPort)
 	aHttp.SetListen(config.Config.ListenHost + ":" + config.Config.ListenPort)
+
+	// Build the WebSocket Origin allow-list once, after config is loaded,
+	// so the fake shell endpoint refuses CSWSH and Host-header smuggling
+	// before the first request is served. When AllowedOrigins is empty
+	// AND no public address is configured, the list stays empty and the
+	// shell is effectively disabled (every upgrade is rejected). This
+	// is the safe default -- operators must opt in to remote shell.
+	shell.InitAllowedOrigins(config.Config)
+	if len(shell.AllowedOriginsSnapshot()) == 0 && config.Config.FeatureShell {
+		log.Default().Println("WARN: WebSocket shell endpoint active but no allowed origins configured; " +
+			"all WebSocket upgrades will be rejected. Set ALLOWED_ORIGINS or PUBLIC_IPV4/PUBLIC_IPV6/LISTEN_IP.")
+	}
 
 	SetupHttpRoute(aHttp.GetEngine())
 
