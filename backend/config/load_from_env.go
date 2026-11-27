@@ -61,6 +61,17 @@ func LoadFromEnv() {
 		Config.SpeedtestFileList = fileLists
 	}
 
+	if v := os.Getenv("ALLOWED_ORIGINS"); v != "" {
+		origins := strings.Split(v, ",")
+		cleaned := make([]string, 0, len(origins))
+		for _, o := range origins {
+			if t := strings.TrimSpace(o); t != "" {
+				cleaned = append(cleaned, t)
+			}
+		}
+		Config.AllowedOrigins = cleaned
+	}
+
 	if !IsInternalCall {
 		log.Default().Println("Loading config from environment variables...")
 	}

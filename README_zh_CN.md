@@ -58,6 +58,7 @@ docker run -d \
 | UTILITIES_IPERF3_PORT_MIN | 30000                                                                | 30000                                                      | iPerf3 服务器端口范围 - 开始                                                             |
 | UTILITIES_IPERF3_PORT_MAX | 31000                                                                | 31000                                                      | iPerf3 服务器端口范围 - 结束                                                             |
 | SPONSOR_MESSAGE           | "Test message" or "/tmp/als_readme.md" or "http://some_host/114514.md" | ''                                                         | 显示节点赞助商信息 (支持 Markdown, 支持 URL/文字/文件 (文件需要映射到容器中，使用映射后的路径) |
+| ALLOWED_ORIGINS           | als.example.com,monitor.example.com                                  | (PUBLIC_IPV4 + PUBLIC_IPV6 + LISTEN_IP)                   | WebSocket Origin 白名单 (逗号分隔)，用于 fake shell 端点的 CSWSH 防护。空列表会拒绝所有 WebSocket 连接 |
 
 ## 功能
 - [x] HTML 5 速度测试
