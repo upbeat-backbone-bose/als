@@ -105,10 +105,12 @@ ui/
     "vue": "^3.5.44"
   },
   "overrides": {
-    "brace-expansion": "^5.0.9",
-    "minimatch": "^10.2.5",
+    "brace-expansion": "^5.0.12",
+    "minimatch": "^11.0.3",
+    "glob": "^14.0.3",
+    "picomatch": "^4.0.7",
     "@eslint/eslintrc": {
-      "minimatch": "^10.2.5"
+      "minimatch": "^11.0.3"
     },
     "markdown-it": "^14.3.3",
     "js-yaml": "^4.3.2"
@@ -146,7 +148,9 @@ ui/
 }
 ```
 
-> `overrides` 用于锁定存在安全公告的传递依赖版本（`markdown-it` / `brace-expansion` / `minimatch` / `js-yaml`），改动时请一并复核。
+> `overrides` 用于锁定存在安全公告的传递依赖版本（`markdown-it` / `brace-expansion` / `minimatch` / `glob` / `js-yaml`），改动时请一并复核。
+>
+> **picomatch 公告已撤回**：GitHub 于 2026-11-18 撤回 GHSA-fc5q-39xc-vjpf（CVE-2026-112366），说明该问题不属于安全问题；上游维护者建议不要允许不可信用户定义正则表达式。当前不为该公告保留 `picomatch` 版本 pin。
 
 **核心库说明**:
 

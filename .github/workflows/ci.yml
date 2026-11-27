@@ -113,7 +113,7 @@ jobs:
         # go.mod requires a newer Go than the one it was built with
         # ("the Go language version ... is lower than the targeted Go
         # version"). v2.15.0 is built with go1.27.0 and works against
-        # the current go.mod (go 1.27.3). The install script is pinned
+        # the current go.mod (go 1.27.4). The install script is pinned
         # to the release tag instead of master: the master branch
         # script still carries a broken `openssl -dst openssl dgst`
         # fallback that fails checksum verification.

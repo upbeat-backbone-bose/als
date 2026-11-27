@@ -128,7 +128,7 @@ ui/
 ### 3.2 后端组件
 
 **技术栈**:
-- Go 1.27.3
+- Go 1.27.4
 - Gin Web Framework
 - Gorilla WebSocket
 - Cobra CLI

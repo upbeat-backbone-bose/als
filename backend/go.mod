@@ -1,12 +1,12 @@
 module github.com/samlm0/als/v2
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/creack/pty v1.1.24
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
 	github.com/miekg/dns v1.1.73
 	github.com/reeflective/console v0.5.0
 	github.com/samlm0/go-ping v0.1.0
