@@ -148,9 +148,9 @@ ui/
 }
 ```
 
-> `overrides` 用于锁定存在安全公告的传递依赖版本（`markdown-it` / `brace-expansion` / `minimatch` / `glob` / `js-yaml` / `picomatch`），改动时请一并复核。
+> `overrides` 用于锁定存在安全公告的传递依赖版本（`markdown-it` / `brace-expansion` / `minimatch` / `glob` / `js-yaml`），改动时请一并复核。
 >
-> **picomatch 待跟进**：`picomatch@4.0.7` 命中 GHSA-fc5q-39xc-vjpf（ReDoS，CVE-2026-112366，受影响范围 `<= 4.0.7`）。截至 2026-11-18 上游尚未发布修复版本（公告的 `first_patched_version` 为空，候选 PR 均未合并），因此无法通过升级 picomatch 关闭 Dependabot 告警 #69。该依赖只出现在构建/测试链（`vite` / `vitest` / `unplugin-*` → `tinyglobby` / `fdir`），不会进入 `ui/dist` 产物，glob 模式也来自仓库配置而非网络输入，故不影响线上运行时。上游发布修复版后，把上面的 pin 升到 `^4.0.8` 并同步 `package-lock.json`，告警随之关闭。
+> **picomatch 公告已撤回**：GitHub 于 2026-11-18 撤回 GHSA-fc5q-39xc-vjpf（CVE-2026-112366），说明该问题不属于安全问题；上游维护者建议不要允许不可信用户定义正则表达式。当前不为该公告保留 `picomatch` 版本 pin。
 
 **核心库说明**:
 
