@@ -11,6 +11,11 @@
 # Test binary, built with `go test -c`
 *.test
 
+# Local build artifact: `go build -o als ./...` from backend/ writes the
+# executable inside the existing `als/` package directory. `*.exe` above
+# covers Windows; this covers the extensionless Linux/macOS binary.
+/als/als
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
